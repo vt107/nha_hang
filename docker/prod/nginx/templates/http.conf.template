@@ -1,0 +1,8 @@
+# Chưa có chứng chỉ SSL: phục vụ trực tiếp cổng 80 (dùng khi test, trong LAN, hoặc sau Cloudflare / load balancer có SSL).
+server {
+    listen 80 default_server;
+    server_name _;
+
+    include /etc/nginx/snippets/acme.conf;
+    include /etc/nginx/snippets/app.conf;
+}

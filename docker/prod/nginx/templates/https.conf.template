@@ -1,0 +1,29 @@
+# Đã có chứng chỉ Let's Encrypt cho ${SERVER_NAME}: cổng 80 chuyển hướng sang HTTPS.
+server {
+    listen 80 default_server;
+    server_name _;
+
+    include /etc/nginx/snippets/acme.conf;
+
+    location / {
+        return 301 https://${SERVER_NAME}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name ${SERVER_NAME};
+
+    ssl_certificate /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    include /etc/nginx/snippets/acme.conf;
+    include /etc/nginx/snippets/app.conf;
+}

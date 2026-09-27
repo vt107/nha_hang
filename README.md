@@ -17,6 +17,10 @@ npm install && npm run build
 - Web: http://localhost:8090 · Admin: http://localhost:8090/admin (`admin@nhahang.test` / `password`) · Horizon: `/horizon`
 - Test: `make test`
 
+## Triển khai production
+
+Docker Compose (`compose.prod.yaml`): nginx cổng 80 / HTTPS Let's Encrypt, backup tự động, `./deploy.sh` để cập nhật. Xem [docs/deploy.md](docs/deploy.md).
+
 ## Tự xác nhận chuyển khoản (SePay)
 
 1. Tạo webhook trên my.sepay.vn: URL `{APP_URL}/webhooks/sepay`, chứng thực **API Key**.

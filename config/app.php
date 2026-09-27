@@ -55,6 +55,12 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
 
     /*
+    | Chạy sau Cloudflare / load balancer: IP proxy tin cậy ("*" = mọi proxy) để lấy đúng IP khách
+    | (rate limit) và nhận biết HTTPS. Để trống khi nginx nhận kết nối trực tiếp từ khách.
+    */
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
