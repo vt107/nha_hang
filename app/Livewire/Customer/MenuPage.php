@@ -12,6 +12,7 @@ use App\Services\Menu\MenuCatalog;
 use App\Services\Ordering\CartService;
 use App\Services\Ordering\OptionResolver;
 use App\Services\Ordering\OrderService;
+use App\Support\Site;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
@@ -99,6 +100,12 @@ class MenuPage extends Component
     /** Bấm "+" trên thẻ món: món có tùy chọn thì mở bảng chọn, không thì thêm luôn. */
     public function add(int $menuItemId): void
     {
+        if (! app(Site::class)->qrOrderingEnabled()) {
+            $this->toast('Vui lòng gọi nhân viên để gọi món.', 'info');
+
+            return;
+        }
+
         $item = $this->itemsById->get($menuItemId);
 
         if (! $item || ! $item->is_available) {

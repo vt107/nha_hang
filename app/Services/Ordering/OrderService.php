@@ -17,6 +17,7 @@ use App\Models\TableSession;
 use App\Models\User;
 use App\Services\Menu\MenuCatalog;
 use App\Support\Code;
+use App\Support\Site;
 use Illuminate\Support\Facades\DB;
 
 class OrderService
@@ -30,6 +31,10 @@ class OrderService
     /** Khách gửi giỏ hàng của điện thoại mình. */
     public function placeFromCart(TableSession $session, string $deviceId, ?string $note = null): Order
     {
+        if (! app(Site::class)->qrOrderingEnabled()) {
+            throw new BusinessException('Nhà hàng đang tạm ngưng gọi món qua QR, vui lòng gọi nhân viên.');
+        }
+
         $order = $this->place($session, $this->cart->lines($session, $deviceId), OrderSource::Qr, $note, deviceId: $deviceId);
 
         $this->cart->clear($session, $deviceId);

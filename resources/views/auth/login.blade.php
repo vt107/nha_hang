@@ -3,7 +3,10 @@
         <form method="POST" action="{{ route('login') }}" class="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
             @csrf
             <div class="text-center">
-                <h1 class="text-xl font-bold">{{ \App\Models\Setting::get('restaurant.name', config('app.name')) }}</h1>
+                @if ($logo = $site->logoUrl())
+                    <img src="{{ $logo }}" alt="{{ $site->name() }}" class="mx-auto mb-2 h-14 w-auto">
+                @endif
+                <h1 class="text-xl font-bold">{{ $site->name() }}</h1>
                 <p class="text-sm text-stone-500">Đăng nhập nhân viên</p>
             </div>
 

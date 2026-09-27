@@ -13,7 +13,15 @@
             </div>
         </x-slot:header>
 
+        @php($ordering = $site->qrOrderingEnabled())
         <div class="space-y-6 px-4 py-4">
+            @if ($welcome = $site->get('menu.welcome_message'))
+                <p class="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">{!! nl2br(e($welcome)) !!}</p>
+            @endif
+            @unless ($ordering)
+                <p class="rounded-2xl bg-stone-900 px-4 py-3 text-sm text-white">Mời quý khách xem menu và <strong>gọi nhân viên</strong> để gọi món.</p>
+            @endunless
+
             @forelse ($this->categories as $category)
                 <section id="cat-{{ $category->id }}" class="scroll-mt-32">
                     <h2 class="mb-2 text-base font-bold text-stone-800">{{ $category->name }}</h2>
@@ -46,6 +54,8 @@
 
                                     @if (! $item->is_available)
                                         <span class="absolute inset-x-1 bottom-1 rounded-lg bg-stone-900/80 py-1 text-center text-xs font-semibold text-white">Tạm hết</span>
+                                    @elseif (! $ordering)
+                                        {{-- Chỉ xem menu: không có nút thêm --}}
                                     @elseif ($qty > 0 && ! $hasOptions)
                                         <div class="absolute inset-x-1 -bottom-2 flex items-center justify-between rounded-full bg-amber-600 p-0.5 text-white shadow">
                                             <button type="button" wire:click="decrement({{ $item->id }})" class="flex size-7 items-center justify-center rounded-full text-lg font-bold active:bg-amber-700" aria-label="Bớt">−</button>
@@ -71,7 +81,7 @@
         </div>
 
         <x-slot:footer>
-            @if ($this->cartCount > 0)
+            @if ($ordering && $this->cartCount > 0)
                 <div class="fixed inset-x-0 bottom-16 z-20 px-4 pb-[env(safe-area-inset-bottom)]">
                     <button type="button" x-on:click="cartOpen = true"
                         class="mx-auto flex w-full max-w-lg items-center justify-between rounded-2xl bg-stone-900 px-4 py-3.5 text-white shadow-xl active:scale-[.98]">

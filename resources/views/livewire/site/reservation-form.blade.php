@@ -1,10 +1,20 @@
 <div class="min-h-screen bg-stone-50">
     <div class="mx-auto max-w-lg px-4 py-8">
-        <a href="{{ route('home') }}" class="text-sm font-medium text-amber-700">← {{ \App\Models\Setting::get('restaurant.name', config('app.name')) }}</a>
+        <a href="{{ route('home') }}" class="text-sm font-medium text-amber-700">← {{ $site->name() }}</a>
         <h1 class="mt-2 text-3xl font-bold">Đặt bàn</h1>
         <p class="mt-1 text-stone-600">Nhà hàng sẽ gọi lại xác nhận trong thời gian sớm nhất.</p>
+        @if ($note = $site->get('reservation.form_note'))
+            <p class="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">{{ $note }}</p>
+        @endif
 
-        @if ($booked)
+        @if (! $site->reservationsEnabled())
+            <div class="mt-6 rounded-2xl bg-white p-5 text-center ring-1 ring-stone-200">
+                <p class="font-semibold">Nhà hàng đang tạm ngưng nhận đặt bàn online.</p>
+                @if ($phone = $site->get('restaurant.phone'))
+                    <p class="mt-1 text-stone-600">Vui lòng gọi <a href="tel:{{ preg_replace('/[^0-9+]/', '', $phone) }}" class="font-semibold text-amber-700">{{ $phone }}</a> để đặt bàn.</p>
+                @endif
+            </div>
+        @elseif ($booked)
             <div class="mt-6 rounded-2xl bg-emerald-50 p-5 ring-1 ring-emerald-200">
                 <p class="text-lg font-bold text-emerald-800">Đã nhận yêu cầu đặt bàn!</p>
                 <p class="mt-1 text-emerald-900">Mã đặt bàn: <span class="font-mono font-bold">{{ $booked->code }}</span></p>

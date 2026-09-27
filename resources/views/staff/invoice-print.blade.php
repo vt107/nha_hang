@@ -1,5 +1,4 @@
 @use('App\Support\Money')
-@use('App\Models\Setting')
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -30,9 +29,11 @@
 <body onload="window.print()">
     <div class="toolbar"><button onclick="window.print()">In hóa đơn</button></div>
     <div class="receipt">
-        <div class="center bold big">{{ Setting::get('restaurant.name', config('app.name')) }}</div>
-        <div class="center">{{ Setting::get('restaurant.address') }}</div>
-        <div class="center">ĐT: {{ Setting::get('restaurant.phone') }}</div>
+        <div class="center bold big">{{ $site->name() }}</div>
+        @if ($site->get('restaurant.address'))<div class="center">{{ $site->get('restaurant.address') }}</div>@endif
+        @if ($site->get('restaurant.phone'))<div class="center">ĐT: {{ $site->get('restaurant.phone') }}</div>@endif
+        @if ($site->get('invoice.tax_code'))<div class="center">MST: {{ $site->get('invoice.tax_code') }}</div>@endif
+        @if ($site->get('invoice.header_note'))<div class="center">{{ $site->get('invoice.header_note') }}</div>@endif
         <hr>
         <div class="center bold">HÓA ĐƠN THANH TOÁN</div>
         @if ($invoice->status === \App\Enums\InvoiceStatus::Void)
@@ -62,7 +63,7 @@
             @endforeach
         </table>
         <hr>
-        <div class="center">Cảm ơn quý khách, hẹn gặp lại!</div>
+        <div class="center">{!! nl2br(e($site->get('invoice.footer_note', 'Cảm ơn quý khách, hẹn gặp lại!'))) !!}</div>
     </div>
 </body>
 </html>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\QrPrintController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Customer\QrEntryController;
+use App\Http\Controllers\Site\SeoController;
 use App\Http\Controllers\Staff\InvoicePrintController;
 use App\Http\Controllers\Webhook\SePayWebhookController;
 use App\Livewire\Customer\BillPage;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\Route;
 // Website công khai
 Route::get('/', fn (MenuCatalog $catalog) => view('public.home', ['categories' => $catalog->categories()]))->name('home');
 Route::livewire('/dat-ban', ReservationForm::class)->name('reservations.create');
+Route::get('/robots.txt', [SeoController::class, 'robots']);
+Route::get('/sitemap.xml', [SeoController::class, 'sitemap']);
 
 // Khách tại bàn (quét QR)
 Route::get('/t/{token}', QrEntryController::class)->middleware('throttle:30,1')->name('qr.enter');
