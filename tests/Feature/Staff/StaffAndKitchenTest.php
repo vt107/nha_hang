@@ -90,7 +90,7 @@ class StaffAndKitchenTest extends TestCase
             ->assertSee('Gọi món hộ khách')
             ->call('pick', $this->pho->id, 1)
             ->call('pick', $this->pho->id, 1)
-            ->assertSet('picked', [$this->pho->id => 2])
+            ->assertSet('picked', [CartService::lineKey($this->pho->id) => ['menu_item_id' => $this->pho->id, 'option_ids' => [], 'quantity' => 2, 'note' => null]])
             ->set('staffNote', 'Làm nhanh')
             ->call('submitStaffOrder')
             ->assertSet('picked', []);

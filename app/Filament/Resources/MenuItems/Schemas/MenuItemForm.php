@@ -58,6 +58,14 @@ class MenuItemForm
                             ->label('Mô tả')
                             ->rows(3)
                             ->columnSpanFull(),
+                        Select::make('optionGroups')
+                            ->label('Size / topping')
+                            ->helperText('Tạo nhóm ở mục Thực đơn → Size / topping.')
+                            ->relationship('optionGroups', 'name')
+                            ->getOptionLabelFromRecordUsing(fn ($record) => $record->internal_name ?: $record->name)
+                            ->multiple()
+                            ->preload()
+                            ->columnSpanFull(),
                         FileUpload::make('image')
                             ->label('Ảnh món')
                             ->image()

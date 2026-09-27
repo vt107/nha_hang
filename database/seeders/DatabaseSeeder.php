@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             DiningTableSeeder::class,
             MenuSeeder::class,
+            OptionSeeder::class,
         ]);
     }
 }

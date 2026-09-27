@@ -4,11 +4,13 @@ namespace App\Livewire\Customer;
 
 use App\Enums\OrderStatus;
 use App\Exceptions\BusinessException;
+use App\Livewire\Concerns\ConfiguresMenuOptions;
 use App\Livewire\Customer\Concerns\UsesTableSession;
 use App\Models\Category;
 use App\Models\MenuItem;
 use App\Services\Menu\MenuCatalog;
 use App\Services\Ordering\CartService;
+use App\Services\Ordering\OptionResolver;
 use App\Services\Ordering\OrderService;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
@@ -19,6 +21,7 @@ use Livewire\Component;
 #[Title('Menu')]
 class MenuPage extends Component
 {
+    use ConfiguresMenuOptions;
     use UsesTableSession;
 
     public string $orderNote = '';
@@ -42,28 +45,43 @@ class MenuPage extends Component
     }
 
     /**
-     * @return list<array{id: int, name: string, price: int, quantity: int, note: ?string, amount: int, orderable: bool}>
+     * @return list<array{key: string, id: int, name: string, options: string, price: int, quantity: int, note: ?string, amount: int, orderable: bool}>
      */
     #[Computed]
     public function cartLines(): array
     {
         $lines = [];
 
-        foreach (app(CartService::class)->lines($this->tableSession, $this->deviceId) as $id => $line) {
-            $item = $this->itemsById->get($id);
+        foreach (app(CartService::class)->lines($this->tableSession, $this->deviceId) as $key => $line) {
+            $item = $this->itemsById->get($line['menu_item_id']);
+            $options = $item?->optionGroups->flatMap->options->whereIn('id', $line['option_ids']) ?? collect();
+            $price = $item ? $item->price + $options->sum('price_delta') : 0;
 
             $lines[] = [
-                'id' => $id,
+                'key' => $key,
+                'id' => $line['menu_item_id'],
                 'name' => $item?->name ?? 'Món không còn bán',
-                'price' => $item?->price ?? 0,
+                'options' => $options->pluck('name')->join(', '),
+                'price' => $price,
                 'quantity' => $line['quantity'],
                 'note' => $line['note'],
-                'amount' => ($item?->price ?? 0) * $line['quantity'],
-                'orderable' => (bool) $item?->is_available,
+                'amount' => $price * $line['quantity'],
+                'orderable' => (bool) $item?->is_available && $options->count() === count($line['option_ids']),
             ];
         }
 
         return $lines;
+    }
+
+    /**
+     * Tổng số phần theo món (cộng mọi bộ tùy chọn), để hiện trên thẻ món.
+     *
+     * @return Collection<int, int>
+     */
+    #[Computed]
+    public function quantitiesByItem(): Collection
+    {
+        return collect($this->cartLines)->groupBy('id')->map->sum('quantity');
     }
 
     #[Computed]
@@ -78,26 +96,74 @@ class MenuPage extends Component
         return array_sum(array_column($this->cartLines, 'amount'));
     }
 
+    /** Bấm "+" trên thẻ món: món có tùy chọn thì mở bảng chọn, không thì thêm luôn. */
     public function add(int $menuItemId): void
     {
-        $this->changeQuantity($menuItemId, +1);
+        $item = $this->itemsById->get($menuItemId);
+
+        if (! $item || ! $item->is_available) {
+            $this->toast('Món này tạm hết, bạn chọn món khác nhé.', 'warning');
+
+            return;
+        }
+
+        if ($item->optionGroups->isNotEmpty()) {
+            $this->startConfiguring($menuItemId);
+
+            return;
+        }
+
+        $this->addToCart($menuItemId, 1);
     }
 
+    /** Bớt 1 phần của món không có tùy chọn (thẻ món). */
     public function decrement(int $menuItemId): void
     {
-        $this->changeQuantity($menuItemId, -1);
+        $this->changeLine(CartService::lineKey($menuItemId), -1);
     }
 
-    public function remove(int $menuItemId): void
+    public function addConfigured(OptionResolver $resolver): void
     {
-        app(CartService::class)->setQuantity($this->tableSession, $this->deviceId, $menuItemId, 0);
-        unset($this->cartLines);
+        $item = $this->configuringItem;
+
+        if (! $item) {
+            return;
+        }
+
+        try {
+            $resolver->resolve($item, $this->configuredOptionIds());
+        } catch (BusinessException $e) {
+            $this->toast($e->getMessage(), 'warning');
+
+            return;
+        }
+
+        if ($this->addToCart($item->id, $this->configQuantity, $this->configuredOptionIds(), $this->configNote)) {
+            $this->toast("Đã thêm {$item->name} vào giỏ", 'success');
+            $this->cancelConfiguring();
+        }
     }
 
-    public function updateNote(int $menuItemId, ?string $note): void
+    public function incrementLine(string $key): void
     {
-        app(CartService::class)->setNote($this->tableSession, $this->deviceId, $menuItemId, $note);
-        unset($this->cartLines);
+        $this->changeLine($key, +1);
+    }
+
+    public function decrementLine(string $key): void
+    {
+        $this->changeLine($key, -1);
+    }
+
+    public function removeLine(string $key): void
+    {
+        app(CartService::class)->setQuantity($this->tableSession, $this->deviceId, $key, 0);
+        $this->forgetCart();
+    }
+
+    public function updateNote(string $key, ?string $note): void
+    {
+        app(CartService::class)->setNote($this->tableSession, $this->deviceId, $key, $note);
+        $this->forgetCart();
     }
 
     public function placeOrder(OrderService $orders): void
@@ -123,26 +189,41 @@ class MenuPage extends Component
         $this->redirectRoute('customer.orders', navigate: true);
     }
 
-    private function changeQuantity(int $menuItemId, int $delta): void
+    /**
+     * @param  list<int>  $optionIds
+     */
+    private function addToCart(int $menuItemId, int $quantity, array $optionIds = [], ?string $note = null): bool
     {
-        $item = $this->itemsById->get($menuItemId);
+        try {
+            app(CartService::class)->add($this->tableSession, $this->deviceId, $menuItemId, $quantity, $optionIds, $note);
+        } catch (BusinessException $e) {
+            $this->toast($e->getMessage(), 'warning');
 
-        if ($delta > 0 && (! $item || ! $item->is_available)) {
-            $this->toast('Món này tạm hết, bạn chọn món khác nhé.', 'warning');
-
-            return;
+            return false;
+        } finally {
+            $this->forgetCart();
         }
 
+        return true;
+    }
+
+    private function changeLine(string $key, int $delta): void
+    {
         $cart = app(CartService::class);
-        $current = $cart->lines($this->tableSession, $this->deviceId)[$menuItemId]['quantity'] ?? 0;
+        $current = $cart->lines($this->tableSession, $this->deviceId)[$key]['quantity'] ?? 0;
 
         try {
-            $cart->setQuantity($this->tableSession, $this->deviceId, $menuItemId, max(0, $current + $delta));
+            $cart->setQuantity($this->tableSession, $this->deviceId, $key, $current + $delta);
         } catch (BusinessException $e) {
             $this->toast($e->getMessage(), 'warning');
         }
 
-        unset($this->cartLines);
+        $this->forgetCart();
+    }
+
+    private function forgetCart(): void
+    {
+        unset($this->cartLines, $this->quantitiesByItem, $this->cartCount, $this->cartTotal);
     }
 
     public function render(): View

@@ -13,6 +13,7 @@ use App\Models\MenuItem;
 use App\Models\Reservation;
 use App\Models\TableSession;
 use App\Models\User;
+use App\Services\Ordering\CartService;
 use App\Services\Ordering\OrderService;
 use Database\Seeders\SettingSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -75,7 +76,7 @@ class CustomerFlowTest extends TestCase
             ->assertDispatched('toast', type: 'warning')
             ->assertSet('cartCount', 2)
             ->assertSee('100.000 ₫')
-            ->call('updateNote', $pho->id, 'không hành')
+            ->call('updateNote', CartService::lineKey($pho->id), 'không hành')
             ->set('orderNote', 'Mang ra nhanh giúp')
             ->call('placeOrder')
             ->assertRedirect(route('customer.orders'));

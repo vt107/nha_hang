@@ -47,6 +47,13 @@
                                     <p class="text-2xl font-extrabold leading-tight">
                                         <span class="text-amber-400">{{ $item->quantity }}×</span> {{ $item->item_name }}
                                     </p>
+                                    @if ($item->options)
+                                        <div class="mt-1 flex flex-wrap gap-1">
+                                            @foreach ($item->options as $option)
+                                                <span class="rounded bg-sky-500/20 px-2 py-0.5 text-sm font-semibold text-sky-200">{{ $option['name'] }}</span>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                     @if ($item->note)
                                         <p class="mt-1 rounded bg-yellow-300 px-2 py-0.5 text-sm font-bold text-stone-950">⚠ {{ $item->note }}</p>
                                     @endif

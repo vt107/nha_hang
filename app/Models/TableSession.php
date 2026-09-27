@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Một lượt khách ngồi bàn. Mọi order của phiên gộp vào 1 hóa đơn.
@@ -89,11 +88,19 @@ class TableSession extends Model
     }
 
     /**
-     * @return HasOne<Invoice, $this>
+     * Có thể nhiều hóa đơn khi tách bill theo món.
+     *
+     * @return HasMany<Invoice, $this>
      */
-    public function invoice(): HasOne
+    public function invoices(): HasMany
     {
-        return $this->hasOne(Invoice::class);
+        return $this->hasMany(Invoice::class);
+    }
+
+    /** Mã đưa vào nội dung chuyển khoản, không dấu cách / gạch (ngân hàng hay bỏ ký tự đặc biệt): S260927-7KQ2 → S2609277KQ2. */
+    public function paymentCode(): string
+    {
+        return str_replace('-', '', $this->code);
     }
 
     /**

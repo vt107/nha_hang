@@ -26,6 +26,7 @@ class SettingSeeder extends Seeder
             'bank.bin' => '970436',
             'bank.account_number' => '0000000000',
             'bank.account_name' => 'NHA HANG DEMO',
+            'bank.auto_confirm' => true,
 
             'kitchen.warn_after_minutes' => 15,
 

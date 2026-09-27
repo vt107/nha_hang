@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * item_name / unit_price là snapshot lúc gọi: không đọc giá hiện tại của menu_items để tính tiền.
  */
 #[Fillable([
-    'order_id', 'menu_item_id', 'item_name', 'unit_price', 'quantity', 'note', 'status',
+    'order_id', 'invoice_id', 'menu_item_id', 'item_name', 'unit_price', 'options', 'quantity', 'note', 'status',
     'cancel_reason', 'cancelled_by', 'queued_at', 'cooking_at', 'ready_at', 'served_at', 'cancelled_at',
 ])]
 class OrderItem extends Model
@@ -27,6 +27,7 @@ class OrderItem extends Model
         return [
             'status' => OrderItemStatus::class,
             'unit_price' => 'integer',
+            'options' => 'array',
             'quantity' => 'integer',
             'queued_at' => 'datetime',
             'cooking_at' => 'datetime',
@@ -42,6 +43,22 @@ class OrderItem extends Model
     protected function lineTotal(): Attribute
     {
         return Attribute::get(fn () => $this->unit_price * $this->quantity);
+    }
+
+    /** "Trà sữa (Size L, Trân châu)" */
+    protected function displayName(): Attribute
+    {
+        return Attribute::get(fn () => $this->options
+            ? $this->item_name.' ('.collect($this->options)->pluck('name')->join(', ').')'
+            : $this->item_name);
+    }
+
+    /**
+     * @return BelongsTo<Invoice, $this>
+     */
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
     }
 
     /**
@@ -72,6 +89,13 @@ class OrderItem extends Model
     protected function billable(Builder $query): void
     {
         $query->whereIn($query->qualifyColumn('status'), OrderItemStatus::billable());
+    }
+
+    /** Món tính tiền chưa nằm trong hóa đơn nào (còn phải thu). */
+    #[Scope]
+    protected function unbilled(Builder $query): void
+    {
+        $query->billable()->whereNull($query->qualifyColumn('invoice_id'));
     }
 
     #[Scope]

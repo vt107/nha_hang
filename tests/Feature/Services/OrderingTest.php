@@ -65,9 +65,12 @@ class OrderingTest extends TestCase
         $cart = app(CartService::class);
         $cart->add($this->session, 'phone-a', $this->pho->id, 2);
         $cart->add($this->session, 'phone-b', $this->tra->id);
-        $cart->setNote($this->session, 'phone-a', $this->pho->id, 'ít hành');
+        $cart->setNote($this->session, 'phone-a', CartService::lineKey($this->pho->id), 'ít hành');
 
-        $this->assertSame([$this->pho->id => ['quantity' => 2, 'note' => 'ít hành']], $cart->lines($this->session, 'phone-a'));
+        $this->assertSame(
+            [CartService::lineKey($this->pho->id) => ['menu_item_id' => $this->pho->id, 'option_ids' => [], 'quantity' => 2, 'note' => 'ít hành']],
+            $cart->lines($this->session, 'phone-a'),
+        );
         $this->assertSame(1, $cart->count($this->session, 'phone-b'));
     }
 
@@ -77,7 +80,7 @@ class OrderingTest extends TestCase
 
         $this->expectException(BusinessException::class);
 
-        app(CartService::class)->setQuantity($this->session, 'phone-a', $this->pho->id, 4);
+        app(CartService::class)->add($this->session, 'phone-a', $this->pho->id, 4);
     }
 
     public function test_first_qr_order_waits_for_staff_then_next_orders_go_straight_to_kitchen(): void

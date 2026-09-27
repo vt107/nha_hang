@@ -50,7 +50,7 @@ class Board extends Component
     {
         return $this->items
             ->whereIn('status', [OrderItemStatus::Queued, OrderItemStatus::Cooking])
-            ->groupBy('item_name')
+            ->groupBy('display_name')
             ->map(fn ($items) => $items->sum('quantity'))
             ->sortDesc();
     }
@@ -92,7 +92,7 @@ class Board extends Component
     {
         $this->items
             ->where('status', OrderItemStatus::Queued)
-            ->where('item_name', $itemName)
+            ->where('display_name', $itemName)
             ->each(fn (OrderItem $item) => $this->attempt(fn () => $service->transition($item, OrderItemStatus::Cooking, auth()->user())));
 
         $this->refreshBoard();

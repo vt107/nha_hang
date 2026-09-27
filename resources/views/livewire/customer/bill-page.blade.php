@@ -6,7 +6,7 @@
             <section class="rounded-2xl bg-white ring-1 ring-stone-200">
                 <h2 class="border-b border-stone-100 px-4 py-3 font-bold">Tạm tính</h2>
                 @if ($this->summary->lines === [])
-                    <p class="px-4 py-8 text-center text-stone-500">Chưa có món nào được xác nhận.</p>
+                    <p class="px-4 py-8 text-center text-stone-500">{{ $this->paidTotal > 0 ? 'Các món đã được thanh toán.' : 'Chưa có món nào được xác nhận.' }}</p>
                 @else
                     <ul class="divide-y divide-stone-100 text-sm">
                         @foreach ($this->summary->lines as $line)
@@ -24,7 +24,10 @@
                         @if ($this->summary->vat > 0)
                             <div class="flex justify-between"><dt class="text-stone-600">VAT ({{ $this->summary->vatPercent }}%)</dt><dd>{{ Money::format($this->summary->vat) }}</dd></div>
                         @endif
-                        <div class="flex justify-between pt-1.5 text-lg font-bold"><dt>Tổng cộng</dt><dd class="text-amber-700">{{ Money::format($this->summary->total) }}</dd></div>
+                        @if ($this->paidTotal > 0)
+                            <div class="flex justify-between text-emerald-700"><dt>Đã thanh toán trước (tách hóa đơn)</dt><dd>{{ Money::format($this->paidTotal) }}</dd></div>
+                        @endif
+                        <div class="flex justify-between pt-1.5 text-lg font-bold"><dt>{{ $this->paidTotal > 0 ? 'Còn phải trả' : 'Tổng cộng' }}</dt><dd class="text-amber-700">{{ Money::format($this->summary->total) }}</dd></div>
                     </dl>
                     <p class="px-4 pb-3 text-xs text-stone-500">Giảm giá (nếu có) sẽ được nhân viên áp dụng khi thanh toán.</p>
                 @endif
@@ -42,7 +45,7 @@
                         <div class="flex justify-between gap-2"><dt class="text-stone-500">Số tiền</dt><dd class="font-bold text-amber-700">{{ Money::format($this->summary->total) }}</dd></div>
                         <div class="flex justify-between gap-2"><dt class="text-stone-500">Nội dung</dt><dd class="font-mono font-medium">{{ $this->transfer['description'] }}</dd></div>
                     </dl>
-                    <p class="mt-3 text-xs text-stone-500">Sau khi chuyển, bấm “Yêu cầu thanh toán” để nhân viên kiểm tra và xác nhận.</p>
+                    <p class="mt-3 text-xs text-stone-500">Vui lòng <strong>giữ nguyên nội dung chuyển khoản</strong> để hệ thống nhận ra bàn của bạn. Tiền về, trang sẽ tự báo hoàn tất.</p>
                 </section>
             @endif
 

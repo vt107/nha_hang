@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\QrPrintController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Customer\QrEntryController;
 use App\Http\Controllers\Staff\InvoicePrintController;
+use App\Http\Controllers\Webhook\SePayWebhookController;
 use App\Livewire\Customer\BillPage;
 use App\Livewire\Customer\MenuPage;
 use App\Livewire\Customer\OrdersPage;
@@ -26,6 +27,9 @@ Route::middleware('table.session')->group(function () {
     Route::livewire('/mon-da-goi', OrdersPage::class)->name('customer.orders');
     Route::livewire('/thanh-toan', BillPage::class)->name('customer.bill');
 });
+
+// Webhook ngân hàng (SePay) báo tiền chuyển khoản về
+Route::post('/webhooks/sepay', SePayWebhookController::class)->middleware('throttle:120,1')->name('webhooks.sepay');
 
 // Đăng nhập nhân viên
 Route::middleware('guest')->group(function () {

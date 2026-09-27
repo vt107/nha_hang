@@ -24,6 +24,7 @@ class OrderService
     public function __construct(
         private CartService $cart,
         private MenuCatalog $catalog,
+        private OptionResolver $options,
     ) {}
 
     /** Khách gửi giỏ hàng của điện thoại mình. */
@@ -39,7 +40,7 @@ class OrderService
     /**
      * Nhân viên gọi hộ khách: vào bếp ngay, không cần duyệt.
      *
-     * @param  array<int, array{quantity: int, note?: ?string}>  $lines
+     * @param  array<int|string, array{menu_item_id?: int, option_ids?: list<int>, quantity: int, note?: ?string}>  $lines
      */
     public function placeByStaff(TableSession $session, User $staff, array $lines, ?string $note = null): Order
     {
@@ -105,7 +106,9 @@ class OrderService
     }
 
     /**
-     * @param  array<int, array{quantity: int, note?: ?string}>  $lines  menu_item_id => dòng
+     * Mỗi dòng: menu_item_id, option_ids, quantity, note. Thiếu menu_item_id thì key của mảng là menu_item_id.
+     *
+     * @param  array<int|string, array{menu_item_id?: int, option_ids?: list<int>, quantity: int, note?: ?string}>  $lines
      */
     private function place(
         TableSession $session,
@@ -115,7 +118,16 @@ class OrderService
         ?string $deviceId = null,
         ?User $createdBy = null,
     ): Order {
-        $lines = array_filter($lines, fn (array $line) => ($line['quantity'] ?? 0) > 0);
+        $lines = collect($lines)
+            ->map(fn (array $line, int|string $key) => [
+                'menu_item_id' => (int) ($line['menu_item_id'] ?? $key),
+                'option_ids' => $line['option_ids'] ?? [],
+                'quantity' => (int) ($line['quantity'] ?? 0),
+                'note' => $line['note'] ?? null,
+            ])
+            ->filter(fn (array $line) => $line['quantity'] > 0)
+            ->values()
+            ->all();
 
         if ($lines === []) {
             throw new BusinessException('Giỏ hàng đang trống.');
@@ -129,12 +141,18 @@ class OrderService
             }
         }
 
-        $menuItems = $this->catalog->orderableItems(array_keys($lines));
+        $menuItemIds = array_values(array_unique(array_column($lines, 'menu_item_id')));
+        $menuItems = $this->catalog->orderableItems($menuItemIds);
 
-        if ($missing = array_diff(array_keys($lines), $menuItems->keys()->all())) {
+        if ($missing = array_diff($menuItemIds, $menuItems->keys()->all())) {
             $names = MenuItem::withTrashed()->whereKey($missing)->pluck('name')->join(', ');
 
             throw new BusinessException("Món đã hết hoặc ngừng bán: {$names}. Vui lòng bỏ khỏi giỏ hàng.");
+        }
+
+        // Kiểm tra tùy chọn + tính giá trước khi mở transaction.
+        foreach ($lines as $index => $line) {
+            $lines[$index]['resolved'] = $this->options->resolve($menuItems[$line['menu_item_id']], $line['option_ids']);
         }
 
         [$order, $needsConfirmation] = DB::transaction(function () use ($session, $lines, $source, $note, $deviceId, $createdBy, $menuItems) {
@@ -157,13 +175,14 @@ class OrderService
                 'confirmed_at' => $needsConfirmation ? null : now(),
             ]);
 
-            foreach ($lines as $menuItemId => $line) {
-                $menuItem = $menuItems[$menuItemId];
+            foreach ($lines as $line) {
+                $menuItem = $menuItems[$line['menu_item_id']];
 
                 $order->items()->create([
                     'menu_item_id' => $menuItem->id,
                     'item_name' => $menuItem->name,
-                    'unit_price' => $menuItem->price,
+                    'unit_price' => $menuItem->price + $line['resolved']['extra'],
+                    'options' => $line['resolved']['options'] ?: null,
                     'quantity' => $line['quantity'],
                     'note' => $line['note'] ?? null,
                     'status' => $needsConfirmation ? OrderItemStatus::Pending : OrderItemStatus::Queued,
@@ -191,7 +210,7 @@ class OrderService
         ));
 
         if (! $needsConfirmation) {
-            event(new KitchenBoardUpdated("{$tableName}: ".count($lines).' món mới'));
+            event(new KitchenBoardUpdated("{$tableName}: ".array_sum(array_column($lines, 'quantity')).' món mới'));
         }
 
         return $order->load('items');

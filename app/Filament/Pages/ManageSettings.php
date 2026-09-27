@@ -10,6 +10,7 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
@@ -108,7 +109,7 @@ class ManageSettings extends Page
                             ->integer()->minValue(0)->maxValue(100)->suffix('%')->required(),
                     ]),
                 Section::make('Chuyển khoản (VietQR)')
-                    ->description('Khách quét mã VietQR trên trang thanh toán, nhân viên kiểm tra tiền về rồi xác nhận.')
+                    ->description('Khách quét mã VietQR trên trang thanh toán. Có webhook SePay thì hệ thống tự xác nhận, không thì nhân viên kiểm tra tiền về rồi xác nhận.')
                     ->columns(2)
                     ->schema([
                         Select::make('bank.bin')
@@ -124,6 +125,10 @@ class ManageSettings extends Page
                             ->label('Chủ tài khoản')
                             ->required()
                             ->maxLength(100)
+                            ->columnSpanFull(),
+                        Toggle::make('bank.auto_confirm')
+                            ->label('Tự xác nhận chuyển khoản qua webhook SePay')
+                            ->helperText(fn () => 'Tiền về đúng số tiền + đúng mã bàn thì tự thu và đóng bàn. Webhook URL: '.url('/webhooks/sepay').(config('services.sepay.webhook_key') ? '' : ' (chưa đặt SEPAY_WEBHOOK_KEY trong .env)'))
                             ->columnSpanFull(),
                     ]),
                 Section::make('Đặt bàn online')

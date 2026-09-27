@@ -17,4 +17,10 @@ npm install && npm run build
 - Web: http://localhost:8090 · Admin: http://localhost:8090/admin (`admin@nhahang.test` / `password`) · Horizon: `/horizon`
 - Test: `make test`
 
+## Tự xác nhận chuyển khoản (SePay)
+
+1. Tạo webhook trên my.sepay.vn: URL `{APP_URL}/webhooks/sepay`, chứng thực **API Key**.
+2. Đặt cùng key vào `.env`: `SEPAY_WEBHOOK_KEY=...`
+3. Admin → Cài đặt → Chuyển khoản: nhập đúng ngân hàng / số tài khoản, bật "Tự xác nhận chuyển khoản".
+
 Quy ước nghiệp vụ và code: xem [CLAUDE.md](CLAUDE.md).

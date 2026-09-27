@@ -9,54 +9,70 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Giỏ hàng của khách: mỗi điện thoại một giỏ, lưu cache (Redis) theo phiên bàn + device_id, không lưu DB.
- * Mỗi dòng: menu_item_id => ['quantity' => int, 'note' => ?string].
+ * Mỗi dòng là một món + bộ tùy chọn (cùng món khác size là 2 dòng), key = lineKey().
  */
 class CartService
 {
     private const TTL_HOURS = 12;
 
     /**
-     * @return array<int, array{quantity: int, note: ?string}>
+     * @return array<string, array{menu_item_id: int, option_ids: list<int>, quantity: int, note: ?string}>
      */
     public function lines(TableSession $session, string $deviceId): array
     {
         return Cache::get($this->key($session, $deviceId), []);
     }
 
-    public function add(TableSession $session, string $deviceId, int $menuItemId, int $quantity = 1): void
+    /**
+     * @param  list<int>  $optionIds
+     */
+    public function add(TableSession $session, string $deviceId, int $menuItemId, int $quantity = 1, array $optionIds = [], ?string $note = null): string
     {
         $lines = $this->lines($session, $deviceId);
+        $key = self::lineKey($menuItemId, $optionIds);
+        $quantity += $lines[$key]['quantity'] ?? 0;
 
-        $this->setQuantity($session, $deviceId, $menuItemId, ($lines[$menuItemId]['quantity'] ?? 0) + $quantity);
+        $this->ensureWithinLimit($quantity);
+
+        $lines[$key] = [
+            'menu_item_id' => $menuItemId,
+            'option_ids' => self::normalizeOptionIds($optionIds),
+            'quantity' => $quantity,
+            'note' => filled($note) ? mb_substr(trim($note), 0, 200) : ($lines[$key]['note'] ?? null),
+        ];
+
+        $this->save($session, $deviceId, $lines);
+
+        return $key;
     }
 
-    public function setQuantity(TableSession $session, string $deviceId, int $menuItemId, int $quantity): void
+    public function setQuantity(TableSession $session, string $deviceId, string $key, int $quantity): void
     {
         $lines = $this->lines($session, $deviceId);
-        $max = (int) Setting::get('order.max_quantity_per_item', 20);
 
-        if ($quantity > $max) {
-            throw new BusinessException("Mỗi món gọi tối đa {$max} phần một lần.");
+        if (! isset($lines[$key])) {
+            return;
         }
 
         if ($quantity <= 0) {
-            unset($lines[$menuItemId]);
+            unset($lines[$key]);
         } else {
-            $lines[$menuItemId] = ['quantity' => $quantity, 'note' => $lines[$menuItemId]['note'] ?? null];
+            $this->ensureWithinLimit($quantity);
+            $lines[$key]['quantity'] = $quantity;
         }
 
         $this->save($session, $deviceId, $lines);
     }
 
-    public function setNote(TableSession $session, string $deviceId, int $menuItemId, ?string $note): void
+    public function setNote(TableSession $session, string $deviceId, string $key, ?string $note): void
     {
         $lines = $this->lines($session, $deviceId);
 
-        if (! isset($lines[$menuItemId])) {
+        if (! isset($lines[$key])) {
             return;
         }
 
-        $lines[$menuItemId]['note'] = filled($note) ? mb_substr(trim($note), 0, 200) : null;
+        $lines[$key]['note'] = filled($note) ? mb_substr(trim($note), 0, 200) : null;
 
         $this->save($session, $deviceId, $lines);
     }
@@ -72,7 +88,36 @@ class CartService
     }
 
     /**
-     * @param  array<int, array{quantity: int, note: ?string}>  $lines
+     * @param  list<int>  $optionIds
+     */
+    public static function lineKey(int $menuItemId, array $optionIds = []): string
+    {
+        return $menuItemId.':'.implode('-', self::normalizeOptionIds($optionIds));
+    }
+
+    /**
+     * @param  list<int|string>  $optionIds
+     * @return list<int>
+     */
+    private static function normalizeOptionIds(array $optionIds): array
+    {
+        $ids = array_values(array_unique(array_map('intval', $optionIds)));
+        sort($ids);
+
+        return $ids;
+    }
+
+    private function ensureWithinLimit(int $quantity): void
+    {
+        $max = (int) Setting::get('order.max_quantity_per_item', 20);
+
+        if ($quantity > $max) {
+            throw new BusinessException("Mỗi món gọi tối đa {$max} phần một lần.");
+        }
+    }
+
+    /**
+     * @param  array<string, array{menu_item_id: int, option_ids: list<int>, quantity: int, note: ?string}>  $lines
      */
     private function save(TableSession $session, string $deviceId, array $lines): void
     {

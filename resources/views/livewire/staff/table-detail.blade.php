@@ -3,15 +3,16 @@
 @use('App\Enums\OrderItemStatus')
 @use('App\Enums\PaymentMethod')
 
-<div x-data="{ picker: false, checkout: false }" x-on:close-picker.window="picker = false" x-on:close-checkout.window="checkout = false">
+<div x-data="{ picker: false, checkout: false }" x-on:close-picker.window="picker = false" x-on:close-checkout.window="checkout = false" x-on:open-checkout.window="checkout = true">
     <x-staff.shell :title="$diningTable->displayName().' · '.$diningTable->capacity.' ghế'" :back="route('staff.tables')">
         @if ($this->lastInvoice)
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-200">
                 <div>
                     <p class="font-bold text-emerald-800">Đã thanh toán {{ Money::format($this->lastInvoice->total) }}</p>
                     <p class="text-sm text-emerald-900">
-                        Hóa đơn {{ $this->lastInvoice->code }} · {{ $this->lastInvoice->payments->first()?->method->getLabel() }}
-                        @if ($change = $this->lastInvoice->payments->first()?->changeAmount())
+                        Hóa đơn {{ $this->lastInvoice->code }} ·
+                        {{ $this->lastInvoice->payments->map(fn ($p) => $p->method->getLabel().' '.Money::format($p->amount))->join(' + ') }}
+                        @if ($change = $this->lastInvoice->payments->sum(fn ($p) => $p->changeAmount()))
                             · <strong>Thối lại {{ Money::format($change) }}</strong>
                         @endif
                     </p>
@@ -67,6 +68,16 @@
                         </div>
                     @endforeach
 
+                    @foreach ($this->pendingTransfers as $transfer)
+                        <div wire:key="transfer-{{ $transfer->id }}" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sky-50 px-4 py-3 ring-1 ring-sky-300">
+                            <p class="text-sm text-sky-900">
+                                <strong>Đã nhận chuyển khoản {{ Money::format($transfer->amount) }}</strong> lúc {{ $transfer->transacted_at?->format('H:i') }}
+                                <span class="block text-xs">{{ $transfer->note }} · {{ $transfer->reference_code }}</span>
+                            </p>
+                            <button type="button" wire:click="useTransfer({{ $transfer->id }})" class="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white">Dùng để thanh toán</button>
+                        </div>
+                    @endforeach
+
                     @if ($this->readyCount > 0)
                         <div class="flex items-center justify-between gap-3 rounded-2xl bg-sky-50 px-4 py-3 ring-1 ring-sky-300">
                             <p class="font-semibold text-sky-900">{{ $this->readyCount }} món bếp đã làm xong</p>
@@ -105,10 +116,11 @@
                                     <li wire:key="item-{{ $item->id }}" class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                                         <div class="min-w-0">
                                             <p @class(['font-medium', 'text-stone-400 line-through' => $item->status === OrderItemStatus::Cancelled])>
-                                                <span class="font-bold">{{ $item->quantity }}×</span> {{ $item->item_name }}
+                                                <span class="font-bold">{{ $item->quantity }}×</span> {{ $item->display_name }}
                                                 <span class="text-sm font-normal text-stone-500">{{ Money::format($item->line_total) }}</span>
                                             </p>
                                             @if ($item->note)<p class="text-xs text-stone-500">“{{ $item->note }}”</p>@endif
+                                            @if ($item->invoice_id)<p class="text-xs font-semibold text-emerald-700">Đã tính tiền</p>@endif
                                             @if ($item->cancel_reason)<p class="text-xs text-red-600">{{ $item->cancel_reason }}</p>@endif
                                         </div>
                                         <div class="flex items-center gap-2">
@@ -135,8 +147,20 @@
                 <aside class="space-y-3 lg:sticky lg:top-20 lg:self-start">
                     <button type="button" x-on:click="picker = true" class="w-full rounded-xl bg-stone-900 py-3 font-semibold text-white">+ Gọi món hộ khách</button>
                     <button type="button" x-on:click="checkout = true" class="w-full rounded-xl bg-amber-600 py-3 font-semibold text-white">
-                        Thanh toán · {{ Money::format($this->summary->total) }}
+                        Thanh toán · {{ Money::format($this->remainingTotal) }}
                     </button>
+
+                    @if ($this->sessionInvoices->isNotEmpty())
+                        <div class="rounded-xl bg-white p-3 text-sm ring-1 ring-stone-200">
+                            <p class="mb-1 font-semibold">Hóa đơn đã thu</p>
+                            @foreach ($this->sessionInvoices as $invoice)
+                                <div wire:key="inv-{{ $invoice->id }}" class="flex items-center justify-between gap-2 py-1">
+                                    <span @class(['line-through text-stone-400' => $invoice->status !== \App\Enums\InvoiceStatus::Paid])>{{ $invoice->code }} · {{ Money::format($invoice->total) }}</span>
+                                    <a href="{{ route('staff.invoices.print', $invoice) }}" target="_blank" class="font-medium text-amber-700">In</a>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
 
                     <div class="rounded-xl bg-white p-3 ring-1 ring-stone-200">
                         <p class="mb-2 text-sm font-semibold">Chuyển bàn</p>
@@ -151,8 +175,8 @@
                         </div>
                     </div>
 
-                    @if ($this->summary->subtotal === 0)
-                        <button type="button" wire:click="closeWithoutPayment" wire:confirm="Đóng bàn không thu tiền (khách chưa dùng món nào)?"
+                    @if ($this->remainingTotal === 0)
+                        <button type="button" wire:click="closeWithoutPayment" wire:confirm="Đóng bàn? (không còn món nào phải thu)"
                             class="w-full rounded-xl border border-stone-300 py-2.5 text-sm font-semibold text-stone-700">Đóng bàn (không thu tiền)</button>
                     @endif
                 </aside>
@@ -172,16 +196,19 @@
                                 <p class="mb-1 text-sm font-bold text-stone-500">{{ $category['name'] }}</p>
                                 <div class="grid gap-2 sm:grid-cols-2">
                                     @foreach ($category['items'] as $item)
-                                        @php($qty = $picked[$item->id] ?? 0)
+                                        @php($qty = $this->pickedByItem[$item->id] ?? 0)
+                                        @php($hasOptions = $item->optionGroups->isNotEmpty())
                                         <div wire:key="pick-{{ $item->id }}" @class(['flex items-center justify-between gap-2 rounded-lg px-3 py-2 ring-1', 'ring-amber-400 bg-amber-50' => $qty, 'ring-stone-200' => ! $qty, 'opacity-40' => ! $item->is_available])>
                                             <div class="min-w-0">
                                                 <p class="truncate text-sm font-medium">{{ $item->name }}</p>
-                                                <p class="text-xs text-stone-500">{{ $item->is_available ? Money::format($item->price) : 'Hết món' }}</p>
+                                                <p class="text-xs text-stone-500">{{ $item->is_available ? Money::format($item->price) : 'Hết món' }}{{ $hasOptions && $item->is_available ? ' · có tùy chọn' : '' }}</p>
                                             </div>
                                             @if ($item->is_available)
                                                 <div class="flex shrink-0 items-center gap-1">
-                                                    @if ($qty)
+                                                    @if ($qty && ! $hasOptions)
                                                         <button type="button" wire:click="pick({{ $item->id }}, -1)" class="size-8 rounded-full bg-stone-100 font-bold">−</button>
+                                                    @endif
+                                                    @if ($qty)
                                                         <span class="w-5 text-center font-bold">{{ $qty }}</span>
                                                     @endif
                                                     <button type="button" wire:click="pick({{ $item->id }}, 1)" class="size-8 rounded-full bg-amber-600 font-bold text-white">+</button>
@@ -194,9 +221,22 @@
                         @endforeach
                     </div>
                     <div class="space-y-2 border-t border-stone-100 p-4">
+                        @if ($this->pickedLines)
+                            <ul class="max-h-32 space-y-1 overflow-y-auto text-sm">
+                                @foreach ($this->pickedLines as $line)
+                                    <li wire:key="picked-{{ $line['key'] }}" class="flex items-center justify-between gap-2">
+                                        <span class="min-w-0 truncate"><strong>{{ $line['quantity'] }}×</strong> {{ $line['name'] }} <span class="text-stone-500">{{ $line['options'] }}</span></span>
+                                        <span class="flex shrink-0 items-center gap-1">
+                                            {{ Money::format($line['amount']) }}
+                                            <button type="button" wire:click="changePicked('{{ $line['key'] }}', -1)" class="size-6 rounded-full bg-stone-100 text-xs font-bold">−</button>
+                                        </span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
                         <input type="text" wire:model="staffNote" maxlength="500" placeholder="Ghi chú cho bếp (không bắt buộc)" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm">
                         <button type="button" wire:click="submitStaffOrder" @disabled(! $picked) class="w-full rounded-xl bg-amber-600 py-3 font-semibold text-white disabled:opacity-40">
-                            Gửi xuống bếp · {{ array_sum($picked) }} món · {{ Money::format($this->pickedTotal) }}
+                            Gửi xuống bếp · {{ array_sum(array_column($picked, 'quantity')) }} món · {{ Money::format($this->pickedTotal) }}
                         </button>
                     </div>
                 </div>
@@ -205,20 +245,42 @@
             {{-- Thanh toán --}}
             <div x-show="checkout" x-cloak class="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
                 <div class="absolute inset-0 bg-black/40" x-on:click="checkout = false"></div>
-                <div class="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+                <div class="relative max-h-[94vh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl">
                     <div class="mb-3 flex items-center justify-between">
                         <h2 class="text-lg font-bold">Thanh toán {{ $diningTable->displayName() }}</h2>
                         <button type="button" x-on:click="checkout = false" class="text-sm font-semibold text-stone-500">Đóng</button>
                     </div>
 
-                    @if ($this->unfinishedCount > 0)
-                        <p class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">Còn {{ $this->unfinishedCount }} món chưa phục vụ: đánh dấu đã bưng hoặc hủy trước khi thu tiền.</p>
+                    <div class="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-stone-100 p-1 text-sm font-semibold">
+                        <button type="button" @if ($splitMode) wire:click="toggleSplit" @endif @class(['rounded-lg py-2', 'bg-white shadow' => ! $splitMode])>Thu cả bàn</button>
+                        <button type="button" @unless ($splitMode) wire:click="toggleSplit" @endunless @class(['rounded-lg py-2', 'bg-white shadow' => $splitMode])>Tách hóa đơn theo món</button>
+                    </div>
+
+                    @if (! $splitMode && $this->unfinishedCount > 0)
+                        <p class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">Còn {{ $this->unfinishedCount }} món chưa phục vụ: đánh dấu đã bưng hoặc hủy trước khi thu cả bàn (hoặc tách hóa đơn các món đã xong).</p>
+                    @endif
+
+                    @if ($splitMode)
+                        <p class="mb-2 text-sm text-stone-600">Chọn món khách này trả:</p>
+                        <ul class="mb-3 divide-y divide-stone-100 rounded-xl ring-1 ring-stone-200">
+                            @foreach ($this->unbilledItems as $item)
+                                @php($chosen = $splitSelection[$item->id] ?? 0)
+                                <li wire:key="split-{{ $item->id }}" @class(['flex items-center justify-between gap-2 px-3 py-2 text-sm', 'bg-amber-50' => $chosen])>
+                                    <span class="min-w-0">{{ $item->display_name }} <span class="text-stone-500">· {{ Money::format($item->unit_price) }}</span></span>
+                                    <span class="flex shrink-0 items-center gap-1">
+                                        <button type="button" wire:click="setSplitQuantity({{ $item->id }}, {{ $chosen - 1 }})" class="size-7 rounded-full bg-stone-100 font-bold">−</button>
+                                        <span class="w-12 text-center font-bold">{{ $chosen }}/{{ $item->quantity }}</span>
+                                        <button type="button" wire:click="setSplitQuantity({{ $item->id }}, {{ $chosen + 1 }})" class="size-7 rounded-full bg-stone-100 font-bold">+</button>
+                                    </span>
+                                </li>
+                            @endforeach
+                        </ul>
                     @endif
 
                     @php($summary = $this->summary)
                     <ul class="divide-y divide-stone-100 text-sm">
                         @foreach ($summary->lines as $line)
-                            <li class="flex justify-between py-1.5"><span>{{ $line['quantity'] }}× {{ $line['name'] }}</span><span>{{ Money::format($line['amount']) }}</span></li>
+                            <li class="flex justify-between gap-2 py-1.5"><span>{{ $line['quantity'] }}× {{ $line['name'] }}</span><span class="shrink-0">{{ Money::format($line['amount']) }}</span></li>
                         @endforeach
                     </ul>
                     <dl class="mt-2 space-y-1 border-t border-stone-200 pt-2 text-sm">
@@ -232,48 +294,87 @@
                         <div class="flex justify-between pt-1 text-xl font-bold"><dt>Khách trả</dt><dd class="text-amber-700">{{ Money::format($summary->total) }}</dd></div>
                     </dl>
 
-                    <div class="mt-4 grid grid-cols-2 gap-2">
-                        @foreach (PaymentMethod::cases() as $case)
-                            <label @class(['cursor-pointer rounded-xl py-2.5 text-center font-semibold ring-2', 'bg-amber-50 ring-amber-500' => $method === $case->value, 'ring-stone-200' => $method !== $case->value])>
-                                <input type="radio" wire:model.live="method" value="{{ $case->value }}" class="sr-only"> {{ $case->getLabel() }}
-                            </label>
+                    {{-- Các khoản thanh toán --}}
+                    <div class="mt-4 space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="font-semibold">Khoản thanh toán</p>
+                            <div class="flex items-center gap-2 text-sm" x-data="{ people: 2 }">
+                                <button type="button" wire:click="addPayment" class="rounded-lg bg-stone-100 px-2.5 py-1.5 font-medium">+ Thêm khoản</button>
+                                <span class="flex items-center gap-1 rounded-lg bg-stone-100 px-2 py-1">
+                                    Chia đều
+                                    <input type="number" min="2" max="20" x-model.number="people" class="w-12 rounded border border-stone-300 px-1 py-0.5 text-center">
+                                    người
+                                    <button type="button" x-on:click="$wire.splitEvenly(people)" class="font-semibold text-amber-700">Chia</button>
+                                </span>
+                            </div>
+                        </div>
+
+                        @foreach ($payments as $index => $row)
+                            <div wire:key="pay-{{ $index }}" class="space-y-2 rounded-xl p-3 ring-1 ring-stone-200">
+                                <div class="flex items-center gap-2">
+                                    @foreach (PaymentMethod::cases() as $case)
+                                        <label @class(['flex-1 cursor-pointer rounded-lg py-1.5 text-center text-sm font-semibold ring-2', 'bg-amber-50 ring-amber-500' => $row['method'] === $case->value, 'ring-stone-200' => $row['method'] !== $case->value])>
+                                            <input type="radio" wire:model.live="payments.{{ $index }}.method" value="{{ $case->value }}" class="sr-only"> {{ $case->getLabel() }}
+                                        </label>
+                                    @endforeach
+                                    @if (count($payments) > 1)
+                                        <button type="button" wire:click="removePayment({{ $index }})" class="px-1 text-sm text-red-600" aria-label="Xóa khoản">✕</button>
+                                    @endif
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <label class="text-xs text-stone-500">Số tiền
+                                        <input type="number" min="1" step="1000" wire:model.live.debounce.400ms="payments.{{ $index }}.amount"
+                                            placeholder="{{ $loop->last ? 'Phần còn lại' : '' }}" class="mt-0.5 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-right text-base text-stone-900">
+                                    </label>
+                                    @if ($row['method'] === PaymentMethod::Cash->value)
+                                        <label class="text-xs text-stone-500">Tiền khách đưa
+                                            <input type="number" min="0" step="1000" wire:model.live.debounce.400ms="payments.{{ $index }}.received" class="mt-0.5 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-right text-base text-stone-900">
+                                        </label>
+                                    @else
+                                        <label class="text-xs text-stone-500">Mã giao dịch
+                                            <input type="text" wire:model="payments.{{ $index }}.reference" class="mt-0.5 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-base text-stone-900">
+                                        </label>
+                                    @endif
+                                </div>
+                                @php($amount = filled($row['amount']) ? (int) $row['amount'] : ($loop->last ? max(0, $this->paymentsRemaining) : 0))
+                                @if ($row['method'] === PaymentMethod::Cash->value && filled($row['received']))
+                                    @if ((int) $row['received'] >= $amount)
+                                        <p class="text-sm font-bold text-emerald-700">Thối lại: {{ Money::format((int) $row['received'] - $amount) }}</p>
+                                    @else
+                                        <p class="text-sm font-semibold text-red-600">Khách đưa thiếu {{ Money::format($amount - (int) $row['received']) }}</p>
+                                    @endif
+                                @endif
+                                @if ($row['bank_transaction_id'])
+                                    <p class="text-xs font-semibold text-sky-700">Khoản chuyển khoản đã báo về qua SePay</p>
+                                @endif
+                            </div>
                         @endforeach
+
+                        @php($lastBlank = blank(end($payments)['amount']))
+                        @if (! $lastBlank && $this->paymentsRemaining !== 0)
+                            <p class="text-sm font-semibold text-red-600">
+                                {{ $this->paymentsRemaining > 0 ? 'Còn thiếu '.Money::format($this->paymentsRemaining) : 'Dư '.Money::format(-$this->paymentsRemaining) }}
+                            </p>
+                        @endif
+
+                        @if (collect($payments)->contains('method', PaymentMethod::BankTransfer->value) && $this->transferQr)
+                            <div class="text-center">
+                                <img src="{{ $this->transferQr }}" alt="VietQR" class="mx-auto size-44">
+                                <p class="text-xs text-stone-500">VietQR {{ Money::format($summary->total) }} · nội dung <span class="font-mono font-semibold">{{ $session->paymentCode() }}</span></p>
+                                <p class="text-xs text-stone-500">Chỉ xác nhận sau khi đã kiểm tra tiền về tài khoản.</p>
+                            </div>
+                        @endif
                     </div>
 
-                    @if ($method === PaymentMethod::Cash->value)
-                        <div class="mt-3 space-y-2">
-                            <label class="block text-sm font-medium">Tiền khách đưa
-                                <input type="number" min="0" step="1000" wire:model.live.debounce.400ms="received" placeholder="{{ $summary->total }}" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-right text-lg">
-                            </label>
-                            <div class="flex flex-wrap gap-2">
-                                @foreach (array_unique([$summary->total, (int) ceil($summary->total / 50000) * 50000, (int) ceil($summary->total / 100000) * 100000, (int) ceil($summary->total / 500000) * 500000]) as $suggest)
-                                    <button type="button" wire:click="$set('received', {{ $suggest }})" class="rounded-lg bg-stone-100 px-3 py-1.5 text-sm font-medium">{{ Money::format($suggest) }}</button>
-                                @endforeach
-                            </div>
-                            @if (filled($received) && (int) $received >= $summary->total)
-                                <p class="text-lg font-bold text-emerald-700">Thối lại: {{ Money::format((int) $received - $summary->total) }}</p>
-                            @elseif (filled($received))
-                                <p class="font-semibold text-red-600">Còn thiếu {{ Money::format($summary->total - (int) $received) }}</p>
-                            @endif
-                        </div>
-                    @else
-                        <div class="mt-3 space-y-2 text-center">
-                            @if ($this->transferQr)
-                                <img src="{{ $this->transferQr }}" alt="VietQR" class="mx-auto size-48">
-                                <p class="text-xs text-stone-500">Nội dung CK: <span class="font-mono font-semibold">{{ \App\Support\VietQr::cleanDescription($session->code) }}</span></p>
-                            @endif
-                            <input type="text" wire:model="reference" placeholder="Mã giao dịch (không bắt buộc)" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm">
-                            <p class="text-xs text-stone-500">Chỉ xác nhận sau khi đã kiểm tra tiền về tài khoản.</p>
-                        </div>
-                    @endif
-
                     <button type="button" wire:click="checkout" wire:loading.attr="disabled" wire:confirm="Xác nhận đã nhận đủ {{ Money::format($summary->total) }}?"
-                        @disabled($this->unfinishedCount > 0 || $summary->subtotal === 0)
+                        @disabled($summary->subtotal === 0 || (! $splitMode && $this->unfinishedCount > 0))
                         class="mt-4 w-full rounded-xl bg-emerald-600 py-3.5 text-lg font-bold text-white disabled:opacity-40">
-                        Xác nhận đã thu tiền
+                        {{ $splitMode ? 'Thu hóa đơn tách' : 'Xác nhận đã thu tiền' }}
                     </button>
                 </div>
             </div>
         @endif
     </x-staff.shell>
+
+    @include('partials.option-picker')
 </div>
