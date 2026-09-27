@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\DiningTable;
-use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -24,9 +23,6 @@ class QrPrintController extends Controller
             ->select('dining_tables.*')
             ->get();
 
-        return view('admin.qr-print', [
-            'tables' => $tables,
-            'restaurantName' => Setting::get('restaurant.name', config('app.name')),
-        ]);
+        return view('admin.qr-print', ['tables' => $tables]);
     }
 }

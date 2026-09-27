@@ -15,6 +15,14 @@ class SettingSeeder extends Seeder
             'restaurant.phone' => '0900 000 000',
             'restaurant.address' => '123 Đường ABC, Quận 1, TP.HCM',
             'restaurant.opening_hours' => '10:00 - 22:00',
+            'restaurant.slogan' => 'Món Việt đậm vị, nguyên liệu tươi mỗi ngày',
+
+            'brand.color' => '#d97706',
+
+            'home.show_menu' => true,
+            'seo.allow_indexing' => true,
+            'order.qr_ordering_enabled' => true,
+            'reservation.enabled' => true,
 
             'order.confirm_mode' => OrderConfirmMode::FirstOrder->value,
             'order.max_quantity_per_item' => 20,

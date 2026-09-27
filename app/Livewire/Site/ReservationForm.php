@@ -5,6 +5,7 @@ namespace App\Livewire\Site;
 use App\Models\Reservation;
 use App\Models\Setting;
 use App\Services\Reservations\ReservationService;
+use App\Support\Site;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\View\View;
@@ -80,6 +81,12 @@ class ReservationForm extends Component
 
     public function submit(ReservationService $reservations): void
     {
+        if (! app(Site::class)->reservationsEnabled()) {
+            $this->addError('customer_name', 'Nhà hàng đang tạm ngưng nhận đặt bàn online.');
+
+            return;
+        }
+
         $data = $this->validate();
 
         $reservedAt = Carbon::createFromFormat('Y-m-d H:i', "{$data['date']} {$data['time']}");

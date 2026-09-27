@@ -77,4 +77,7 @@ reservations (n─1 dining_tables, 1─1 table_sessions khi khách đến)
 - Sau proxy (Cloudflare / LB): `TRUSTED_PROXIES` (config `app.trusted_proxies`); `APP_URL` https thì ép sinh link https.
 - `APP_URL` phải là domain / IP mà điện thoại khách truy cập được: link QR in ra dựng từ `APP_URL`, không theo host đang mở trang admin.
 - Cấu hình vận hành trong bảng `settings`, đọc bằng `Setting::get('group.key')`. Secret chỉ để trong `.env`.
+- Cấu hình giao diện / nội dung / SEO (tên, logo, favicon, màu chủ đạo, trang chủ, liên hệ, SEO, bật tắt gọi món QR / đặt bàn...) đọc qua `App\Support\Site` (có giá trị mặc định), view nhận sẵn biến `$site` (view composer). Không gọi `Setting::get` trực tiếp trong view.
+- Màu chủ đạo: giao diện viết bằng class `amber-*` của Tailwind; `partials/head` ghi đè biến `--color-amber-*` bằng sắc độ trộn từ màu admin chọn. Dùng `amber-*` cho màu thương hiệu, không hard-code màu khác. Filament nhận màu qua `Color::hex()`.
+- `<head>` chung ở `partials/head`: chỉ route `home`, `reservations.create` được index (và khi bật `seo.allow_indexing`); mọi trang khác noindex. `robots.txt`, `sitemap.xml` sinh động (`Site/SeoController`).
 - Nhãn hiển thị bằng tiếng Việt.

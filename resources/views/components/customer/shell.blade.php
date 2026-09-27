@@ -9,9 +9,14 @@
 <div class="mx-auto flex min-h-screen max-w-lg flex-col bg-stone-50 pb-20">
     <header class="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur">
         <div class="flex items-center justify-between gap-3 px-4 py-3">
-            <div class="min-w-0">
-                <p class="truncate text-xs font-medium uppercase tracking-wide text-amber-700">{{ \App\Models\Setting::get('restaurant.name', config('app.name')) }}</p>
-                <h1 class="truncate text-lg font-bold">{{ $session->diningTable->displayName() }}</h1>
+            <div class="flex min-w-0 items-center gap-2.5">
+                @if ($logo = $site->logoUrl())
+                    <img src="{{ $logo }}" alt="" class="h-10 w-auto max-w-24 shrink-0 object-contain">
+                @endif
+                <div class="min-w-0">
+                    <p class="truncate text-xs font-medium uppercase tracking-wide text-amber-700">{{ $site->name() }}</p>
+                    <h1 class="truncate text-lg font-bold">{{ $session->diningTable->displayName() }}</h1>
+                </div>
             </div>
             <button type="button" wire:click="callWaiter" wire:loading.attr="disabled"
                 class="flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 active:scale-95">

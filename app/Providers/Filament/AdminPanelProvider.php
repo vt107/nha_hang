@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Support\Site;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -28,9 +29,13 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->brandName('Nhà Hàng')
-            ->colors([
-                'primary' => Color::Amber,
+            // Thương hiệu lấy từ Cài đặt (closure: chỉ đọc DB khi render, không phải lúc build image / boot).
+            ->brandName(fn () => app(Site::class)->name())
+            ->brandLogo(fn () => app(Site::class)->logoUrl())
+            ->brandLogoHeight('2.5rem')
+            ->favicon(fn () => app(Site::class)->faviconUrl())
+            ->colors(fn () => [
+                'primary' => app(Site::class)->hasCustomColor() ? Color::hex(app(Site::class)->color()) : Color::Amber,
             ])
             ->maxContentWidth('full')
             ->sidebarCollapsibleOnDesktop()

@@ -65,7 +65,16 @@ class RevenueChart extends ChartWidget
                     tooltip: { callbacks: { label: (ctx) => ctx.parsed.y.toLocaleString('vi-VN') + ' ₫' } },
                 },
                 scales: {
-                    y: { beginAtZero: true, ticks: { callback: (value) => value >= 1000000 ? (value / 1000000).toLocaleString('vi-VN') + 'tr' : (value / 1000).toLocaleString('vi-VN') + 'k' } },
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: 100000,
+                        ticks: {
+                            precision: 0,
+                            callback: (value) => value >= 1000000
+                                ? (value / 1000000).toLocaleString('vi-VN') + 'tr'
+                                : (value >= 1000 ? (value / 1000).toLocaleString('vi-VN') + 'k' : value),
+                        },
+                    },
                 },
             }
         JS);
