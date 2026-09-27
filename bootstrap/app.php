@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Middleware\EnsureTableSession;
+use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,15 +17,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'role' => \App\Http\Middleware\EnsureUserHasRole::class,
-            'table.session' => \App\Http\Middleware\EnsureTableSession::class,
+            'role' => EnsureUserHasRole::class,
+            'table.session' => EnsureTableSession::class,
         ]);
 
         // Webhook ngân hàng xác thực bằng API key, không có CSRF token.
         $middleware->preventRequestForgery(except: ['webhooks/*']);
 
         $middleware->redirectGuestsTo('/login');
-        $middleware->redirectUsersTo(fn () => \App\Http\Controllers\Auth\LoginController::homeFor(auth()->user()));
+        $middleware->redirectUsersTo(fn () => LoginController::homeFor(auth()->user()));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

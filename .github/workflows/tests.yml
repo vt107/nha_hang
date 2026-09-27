@@ -1,0 +1,64 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: nha_hang_test
+          MYSQL_USER: nha_hang
+          MYSQL_PASSWORD: secret
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -psecret"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=20
+
+    env:
+      DB_HOST: 127.0.0.1
+      REDIS_HOST: 127.0.0.1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_mysql, bcmath, intl, zip, gd, exif, pcntl, redis
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cài thư viện
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci
+
+      - name: Kiểm tra code style (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Build asset (view cần Vite manifest)
+        run: npm run build
+
+      - name: Chuẩn bị .env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Chạy test
+        run: php artisan test

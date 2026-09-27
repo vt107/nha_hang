@@ -9,6 +9,8 @@ Chạy hoàn toàn bằng Docker. PHP trên máy host là 8.0 nên **không** ch
 - `make up` / `make down`: nginx (listen 80 trong container, map ra host bằng `APP_PORT`, máy dev = 8090 vì Apache chiếm 80), php-fpm `app`, `horizon`, `scheduler`, `reverb`, MySQL (:3309 trên host), Redis (:6380 trên host)
 - `make artisan c="..."`, `make composer c="..."`, `make test`, `make fresh` (migrate:fresh --seed), `make restart` (sau khi sửa job / event)
 - `npm run build` / `npm run dev` cho asset Vite (Tailwind 4, Echo)
+- **Production**: `compose.prod.yaml` + `docker/prod/` (image đóng gói sẵn code / vendor / asset, chạy bằng `www-data`, opcache không kiểm tra timestamp), `make prod-*`, `./deploy.sh`. Hướng dẫn: [docs/deploy.md](docs/deploy.md). Nginx tự chọn HTTP (cổng 80) hoặc HTTPS khi có chứng chỉ Let's Encrypt cho `SERVER_NAME`. Sửa code PHP trên production phải build lại image.
+- Tạo admin đầu tiên: `php artisan app:create-admin`
 - Test chạy trên database MySQL riêng `nha_hang_test` (không dùng SQLite: có cột generated + `lockForUpdate`)
 - Tài khoản seed (mật khẩu `password`): `admin@nhahang.test`, `manager@nhahang.test`, `waiter@nhahang.test`, `kitchen@nhahang.test`
 - Nginx proxy `/app/*`, `/apps/*` sang Reverb (:8080 nội bộ); trình duyệt kết nối WebSocket cùng host / port với web (`VITE_REVERB_*`)
@@ -72,6 +74,7 @@ reservations (n─1 dining_tables, 1─1 table_sessions khi khách đến)
 - **Không cache object / model**: `cache.serializable_classes = false` (mặc định Laravel 13), object đọc ra thành `__PHP_Incomplete_Class`. Cache mảng thuộc tính rồi hydrate lại (xem `MenuCatalog`). Test chạy cache Redis thật (DB 14) nên sẽ bắt lỗi này.
 - Scope trên model dùng `$query->qualifyColumn(...)`: các query join / hasManyThrough (`orderItems`, in QR) sẽ lỗi cột mơ hồ nếu không.
 - Lỗi nghiệp vụ ném `App\Exceptions\BusinessException` (thông điệp tiếng Việt); component Livewire nhân viên / bếp gọi service qua `attempt()` (`RunsBusinessActions`) để hiện toast.
+- Sau proxy (Cloudflare / LB): `TRUSTED_PROXIES` (config `app.trusted_proxies`); `APP_URL` https thì ép sinh link https.
 - `APP_URL` phải là domain / IP mà điện thoại khách truy cập được: link QR in ra dựng từ `APP_URL`, không theo host đang mở trang admin.
 - Cấu hình vận hành trong bảng `settings`, đọc bằng `Setting::get('group.key')`. Secret chỉ để trong `.env`.
 - Nhãn hiển thị bằng tiếng Việt.
