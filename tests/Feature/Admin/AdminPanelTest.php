@@ -51,6 +51,9 @@ class AdminPanelTest extends TestCase
             'nhân viên' => ['/admin/users'],
             'đặt bàn' => ['/admin/reservations'],
             'cài đặt' => ['/admin/settings'],
+            'size / topping' => ['/admin/option-groups'],
+            'chuyển khoản' => ['/admin/bank-transactions'],
+            'hóa đơn' => ['/admin/invoices'],
         ];
     }
 

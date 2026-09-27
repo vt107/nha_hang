@@ -88,15 +88,14 @@ class RevenueReport
     }
 
     /**
-     * Món bán chạy (theo số phần) trong các hóa đơn đã thanh toán.
+     * Món bán chạy (theo số phần) trong các hóa đơn đã thanh toán (theo món, không tách theo size / topping).
      *
      * @return Collection<int, array{name: string, quantity: int, amount: int}>
      */
     public function topItems(DateRange $range, int $limit = 10): Collection
     {
         return OrderItem::query()
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->join('invoices', 'invoices.table_session_id', '=', 'orders.table_session_id')
+            ->join('invoices', 'invoices.id', '=', 'order_items.invoice_id')
             ->where('invoices.status', InvoiceStatus::Paid)
             ->whereBetween('invoices.paid_at', [$range->from, $range->to])
             ->whereIn('order_items.status', OrderItemStatus::billable())

@@ -11,15 +11,13 @@ class InvoicePrintController extends Controller
 {
     public function __invoke(Invoice $invoice): View
     {
-        $invoice->load(['payments', 'cashier', 'tableSession.diningTable']);
+        $invoice->load(['payments', 'cashier', 'tableSession.diningTable', 'items']);
 
-        $lines = $invoice->tableSession->orderItems()
-            ->billable()
-            ->orderBy('order_items.id')
-            ->get()
-            ->groupBy(fn (OrderItem $item) => $item->item_name.'|'.$item->unit_price)
+        $lines = $invoice->items
+            ->sortBy('id')
+            ->groupBy(fn (OrderItem $item) => $item->item_name.'|'.$item->unit_price.'|'.json_encode($item->options))
             ->map(fn ($items) => [
-                'name' => $items->first()->item_name,
+                'name' => $items->first()->display_name,
                 'unit_price' => $items->first()->unit_price,
                 'quantity' => $items->sum('quantity'),
                 'amount' => $items->sum(fn (OrderItem $item) => $item->line_total),

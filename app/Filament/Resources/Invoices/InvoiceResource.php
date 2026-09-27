@@ -4,11 +4,17 @@ namespace App\Filament\Resources\Invoices;
 
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\UserRole;
+use App\Exceptions\BusinessException;
 use App\Filament\Resources\Invoices\Pages\ListInvoices;
 use App\Models\Invoice;
+use App\Services\Billing\BillingService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\Summarizers\Sum;
@@ -48,7 +54,7 @@ class InvoiceResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['tableSession.diningTable', 'payments', 'cashier']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['tableSession.diningTable', 'payments', 'cashier', 'voider']))
             ->defaultSort('paid_at', 'desc')
             ->columns([
                 TextColumn::make('code')
@@ -81,11 +87,12 @@ class InvoiceResource extends Resource
                     ->badge(),
                 TextColumn::make('cashier.name')
                     ->label('Thu ngân')
+                    ->placeholder('Tự động (CK)')
                     ->toggleable(),
                 TextColumn::make('status')
                     ->label('Trạng thái')
                     ->badge()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->description(fn (Invoice $record) => $record->void_reason ? 'Lý do: '.$record->void_reason : null),
             ])
             ->filters([
                 Filter::make('paid_at')
@@ -113,6 +120,35 @@ class InvoiceResource extends Resource
                     ->options(InvoiceStatus::class),
             ])
             ->recordActions([
+                Action::make('void')
+                    ->label('Hủy')
+                    ->icon(Heroicon::OutlinedXCircle)
+                    ->color('danger')
+                    ->visible(fn (Invoice $record) => $record->status === InvoiceStatus::Paid
+                        && auth()->user()->hasRole(UserRole::Admin, UserRole::Manager))
+                    ->modalHeading(fn (Invoice $record) => "Hủy hóa đơn {$record->code}")
+                    ->modalDescription('Hóa đơn bị hủy không tính vào doanh thu. Thao tác được ghi lại người hủy và lý do.')
+                    ->schema([
+                        TextInput::make('reason')
+                            ->label('Lý do hủy')
+                            ->required()
+                            ->maxLength(250),
+                        Toggle::make('reopen')
+                            ->label('Mở lại bàn để thu lại tiền')
+                            ->helperText('Bật: sai giảm giá / hình thức thanh toán, cần thu lại. Tắt: hoàn tiền / miễn phí cho khách.')
+                            ->default(true),
+                    ])
+                    ->action(function (Invoice $record, array $data) {
+                        try {
+                            app(BillingService::class)->void($record, auth()->user(), $data['reason'], (bool) $data['reopen']);
+                        } catch (BusinessException $e) {
+                            Notification::make()->title($e->getMessage())->danger()->send();
+
+                            return;
+                        }
+
+                        Notification::make()->title("Đã hủy hóa đơn {$record->code}")->success()->send();
+                    }),
                 Action::make('print')
                     ->label('In lại')
                     ->icon(Heroicon::OutlinedPrinter)

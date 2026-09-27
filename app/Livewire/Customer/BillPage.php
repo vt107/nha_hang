@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Customer;
 
+use App\Enums\InvoiceStatus;
 use App\Enums\ServiceRequestStatus;
 use App\Enums\ServiceRequestType;
 use App\Livewire\Customer\Concerns\UsesTableSession;
@@ -30,6 +31,13 @@ class BillPage extends Component
         return app(BillingService::class)->summarize($this->tableSession);
     }
 
+    /** Đã thu từ các hóa đơn tách trước đó của bàn. */
+    #[Computed]
+    public function paidTotal(): int
+    {
+        return (int) $this->tableSession->invoices()->where('status', InvoiceStatus::Paid)->sum('total');
+    }
+
     #[Computed]
     public function billRequested(): bool
     {
@@ -52,7 +60,7 @@ class BillPage extends Component
             return null;
         }
 
-        $description = VietQr::cleanDescription($this->tableSession->code);
+        $description = $this->tableSession->paymentCode();
 
         return [
             'image' => QrImage::dataUri(VietQr::payload($bin, $account, $this->summary->total, $description)),
@@ -66,7 +74,7 @@ class BillPage extends Component
     #[On('echo:table-session.{sessionToken},.session.updated')]
     public function refreshFromBroadcast(): void
     {
-        unset($this->tableSession, $this->summary, $this->billRequested, $this->transfer);
+        unset($this->tableSession, $this->summary, $this->paidTotal, $this->billRequested, $this->transfer);
         $this->ensureSessionOpen();
     }
 

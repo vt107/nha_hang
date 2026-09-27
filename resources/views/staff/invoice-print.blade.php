@@ -35,6 +35,9 @@
         <div class="center">ĐT: {{ Setting::get('restaurant.phone') }}</div>
         <hr>
         <div class="center bold">HÓA ĐƠN THANH TOÁN</div>
+        @if ($invoice->status === \App\Enums\InvoiceStatus::Void)
+            <div class="center bold big">*** ĐÃ HỦY ***</div>
+        @endif
         <div>Số: {{ $invoice->code }}</div>
         <div>{{ $invoice->tableSession->diningTable->displayName() }} · Vào: {{ $invoice->tableSession->opened_at->format('H:i') }}</div>
         <div>Thanh toán: {{ $invoice->paid_at?->format('H:i d/m/Y') }}</div>
@@ -54,7 +57,7 @@
             @if ($invoice->vat_amount)<tr><td>VAT</td><td class="right">{{ Money::format($invoice->vat_amount) }}</td></tr>@endif
             <tr class="bold big"><td>TỔNG CỘNG</td><td class="right">{{ Money::format($invoice->total) }}</td></tr>
             @foreach ($invoice->payments as $payment)
-                <tr><td>{{ $payment->method->getLabel() }}</td><td class="right">{{ Money::format($payment->received_amount ?? $payment->amount) }}</td></tr>
+                <tr><td>{{ $payment->method->getLabel() }}{{ $payment->reference ? ' ('.$payment->reference.')' : '' }}</td><td class="right">{{ Money::format($payment->received_amount ?? $payment->amount) }}</td></tr>
                 @if ($payment->changeAmount())<tr><td>Tiền thối</td><td class="right">{{ Money::format($payment->changeAmount()) }}</td></tr>@endif
             @endforeach
         </table>

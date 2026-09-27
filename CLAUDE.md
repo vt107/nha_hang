@@ -22,6 +22,7 @@ Chạy hoàn toàn bằng Docker. PHP trên máy host là 8.0 nên **không** ch
 | Phục vụ | `/staff`, `/staff/tables/{id}`, `/staff/invoices/{id}/print` | `Livewire/Staff/TableBoard`, `TableDetail` |
 | Bếp | `/kitchen` | `Livewire/Kitchen/Board` |
 | Admin / quản lý | `/admin` (Filament), `/qr/print` | `app/Filament`, `Admin/QrPrintController` |
+| Webhook ngân hàng | `POST /webhooks/sepay` (không CSRF, header `Authorization: Apikey {SEPAY_WEBHOOK_KEY}`) | `Webhook/SePayWebhookController`, `Services/Billing/BankTransferService` |
 | Đăng nhập nhân viên | `/login` | `Auth/LoginController` (chuyển trang theo vai trò) |
 
 Realtime: `TableSessionUpdated` (kênh private `staff` + public `table-session.{token}`), `KitchenBoardUpdated` (private `kitchen`), `StaffAlerted` (private `staff`). Livewire nghe bằng `#[On('echo...')]`; toast + tiếng bíp cho nhân viên / bếp qua `window.listenForAlerts()` trong `resources/js/app.js`. Màn hình nhân viên / bếp có `wire:poll.30s` dự phòng khi mất WebSocket.
@@ -30,7 +31,8 @@ Realtime: `TableSessionUpdated` (kênh private `staff` + public `table-session.{
 
 ```
 areas 1─n dining_tables 1─n table_sessions 1─n orders 1─n order_items n─1 menu_items n─1 categories
-                               │ 1─1 invoices 1─n payments
+                               │ 1─n invoices 1─n payments n─1 bank_transactions        │ n─n option_groups 1─n options
+                               │        └─1─n order_items (invoice_id: món thuộc hóa đơn nào)
                                └ 1─n service_requests
 reservations (n─1 dining_tables, 1─1 table_sessions khi khách đến)
 ```
@@ -39,7 +41,8 @@ reservations (n─1 dining_tables, 1─1 table_sessions khi khách đến)
 - `dining_tables` **không có cột status**: trống / có khách / chờ thanh toán suy ra từ phiên chưa đóng (`openSession`).
 - `table_sessions` = một lượt khách. Mỗi bàn tối đa 1 phiên chưa đóng, DB đảm bảo bằng cột generated `open_table_id` UNIQUE. Tạo phiên phải bắt `UniqueConstraintViolationException` (2 máy quét QR cùng lúc) rồi đọc lại phiên đang mở.
 - `orders` = một lần bấm "gọi món"; mọi order của phiên gộp vào **một** `invoices`.
-- `order_items` là snapshot tên / giá lúc gọi: không đọc giá hiện tại của `menu_items` để tính tiền.
+- `order_items` là snapshot tên / giá / tùy chọn lúc gọi: `unit_price` = giá món + tiền tùy chọn, `options` JSON `[{group, name, price_delta}]`. Không đọc giá hiện tại của `menu_items` / `options` để tính tiền.
+- `order_items.invoice_id` null = món còn phải thu (scope `unbilled()`). Tách bill một phần số lượng thì tách dòng order_item làm hai.
 
 ## Quy ước nghiệp vụ
 
@@ -49,8 +52,14 @@ reservations (n─1 dining_tables, 1─1 table_sessions khi khách đến)
 - Trạng thái món (`OrderItemStatus`): `pending → queued → cooking → ready → served`, `cancelled` được từ mọi bước trước `served`. Chuyển trạng thái chỉ qua `canTransitionTo()` và ghi cột thời điểm tương ứng (`timestampColumn()`).
 - Bếp **không chia trạm**: một màn hình, 3 cột Đơn mới (`queued`) / Đang làm (`cooking`) / Hoàn thành (`ready`), làm theo từng món.
 - `menu_items.is_active` = admin ẩn / hiện; `is_available` = còn / hết trong ngày (bếp bật tắt). Menu khách dùng scope `visible()`, gọi món chỉ nhận `orderable()`.
-- Thanh toán **tiền mặt / chuyển khoản, nhân viên xác nhận tay**, không có cổng thanh toán hay webhook. Trang khách chỉ hiện VietQR tĩnh từ setting `bank.*`. Mỗi dòng `payments` là một khoản đã nhận; đủ tiền thì invoice `paid` và đóng phiên.
-- Tiền là VND, số nguyên. Doanh thu = tổng `invoices.total` có status `paid`, tính theo `paid_at`. Chỉ món `OrderItemStatus::billable()` được tính tiền.
+- **Size / topping**: `option_groups` dùng chung nhiều món (pivot `menu_item_option_group`), `min_select >= 1` = bắt buộc, `max_select = 1` = chọn một. Server kiểm tra + tính giá ở `OptionResolver`; giỏ hàng key theo `CartService::lineKey(món, tùy chọn)`. Bảng chọn dùng chung: trait `ConfiguresMenuOptions` + `partials/option-picker`.
+- **Thanh toán** qua `BillingService::checkout(session, cashier, list<PaymentLine>, discount, selection)`:
+  - `selection` null = thu toàn bộ món còn lại (bắt buộc không còn món đang làm), có giá trị = tách hóa đơn theo món. Phiên đóng khi không còn món `unbilled`.
+  - Một hóa đơn nhiều `payments` (chia đều, nửa tiền mặt nửa CK); tổng các khoản phải bằng đúng tổng hóa đơn, khoản cuối để `amount` null = phần còn lại.
+  - `cashier` null = hệ thống tự thu (webhook).
+- **Hủy hóa đơn** `BillingService::void()`: chỉ admin / quản lý, bắt buộc lý do. `reopen` = gỡ món khỏi hóa đơn + mở lại phiên (bàn phải trống) để thu lại; không reopen = hoàn tiền / miễn phí.
+- **Chuyển khoản**: nội dung CK = `TableSession::paymentCode()` (mã phiên bỏ gạch). Webhook SePay ghi `bank_transactions` (unique provider + id, gửi lại không thu 2 lần); đúng số tiền + `bank.auto_confirm` bật + không còn món đang làm thì tự `checkout`, còn lại status `matched` chờ nhân viên bấm "Dùng để thanh toán" hoặc admin gán tay bàn cho giao dịch `unmatched`.
+- Tiền là VND, số nguyên. Doanh thu = tổng `invoices.total` có status `paid`, tính theo `paid_at`. Món bán chạy join qua `order_items.invoice_id` (không qua phiên, tránh đếm trùng khi bàn có nhiều hóa đơn).
 - Vai trò (`UserRole`): `admin`, `manager` vào Filament; `waiter` dùng màn hình nhân viên (bàn, order, thu tiền); `kitchen` dùng màn hình bếp. Horizon chỉ cho `admin`.
 
 ## Quy ước code

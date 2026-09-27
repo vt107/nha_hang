@@ -5,7 +5,6 @@ namespace Tests\Feature\Services;
 use App\Enums\InvoiceStatus;
 use App\Enums\OrderItemStatus;
 use App\Enums\OrderStatus;
-use App\Enums\PaymentMethod;
 use App\Enums\TableSessionSource;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\BusinessException;
@@ -19,6 +18,7 @@ use App\Models\Setting;
 use App\Models\TableSession;
 use App\Models\User;
 use App\Services\Billing\BillingService;
+use App\Services\Billing\PaymentLine;
 use App\Services\Ordering\CartService;
 use App\Services\Ordering\OrderService;
 use App\Services\Reports\DateRange;
@@ -88,7 +88,7 @@ class BillingTest extends TestCase
         Setting::set('order.confirm_mode', 'always');
         $pending = app(OrderService::class)->placeFromCart($this->session, 'phone');
 
-        $invoice = app(BillingService::class)->checkout($this->session, $this->waiter, PaymentMethod::Cash, receivedAmount: 200000);
+        $invoice = app(BillingService::class)->checkout($this->session, $this->waiter, [PaymentLine::cash(received: 200000)]);
 
         $this->assertSame(InvoiceStatus::Paid, $invoice->status);
         $this->assertSame(130000, $invoice->total);
@@ -103,7 +103,7 @@ class BillingTest extends TestCase
         $billing = app(BillingService::class);
 
         try {
-            $billing->checkout($this->session, $this->waiter, PaymentMethod::Cash);
+            $billing->checkout($this->session, $this->waiter, [PaymentLine::cash()]);
             $this->fail('Bàn chưa có món');
         } catch (BusinessException) {
         }
@@ -111,7 +111,7 @@ class BillingTest extends TestCase
         $this->serve(['Phở' => [1, 65000]], OrderItemStatus::Cooking);
 
         try {
-            $billing->checkout($this->session, $this->waiter, PaymentMethod::Cash);
+            $billing->checkout($this->session, $this->waiter, [PaymentLine::cash()]);
             $this->fail('Còn món đang làm');
         } catch (BusinessException $e) {
             $this->assertStringContainsString('chưa phục vụ', $e->getMessage());
@@ -120,16 +120,16 @@ class BillingTest extends TestCase
         $this->session->orderItems()->update(['order_items.status' => OrderItemStatus::Served]);
 
         try {
-            $billing->checkout($this->session, $this->waiter, PaymentMethod::Cash, receivedAmount: 50000);
+            $billing->checkout($this->session, $this->waiter, [PaymentLine::cash(received: 50000)]);
             $this->fail('Tiền khách đưa thiếu');
         } catch (BusinessException) {
         }
 
-        $invoice = $billing->checkout($this->session, $this->waiter, PaymentMethod::BankTransfer, reference: 'FT123');
+        $invoice = $billing->checkout($this->session, $this->waiter, [PaymentLine::transfer(reference: 'FT123')]);
         $this->assertSame('FT123', $invoice->payments->first()->reference);
 
         $this->expectException(BusinessException::class);
-        $billing->checkout($this->session, $this->waiter, PaymentMethod::Cash);
+        $billing->checkout($this->session, $this->waiter, [PaymentLine::cash()]);
     }
 
     public function test_staff_checkout_screen(): void
@@ -140,8 +140,8 @@ class BillingTest extends TestCase
             ->test(TableDetail::class, ['diningTable' => $this->session->diningTable])
             ->assertSee('130.000 ₫')
             ->set('discount', 10000)
-            ->set('method', 'cash')
-            ->set('received', 200000)
+            ->set('payments.0.method', 'cash')
+            ->set('payments.0.received', 200000)
             ->assertSee('Thối lại: 80.000 ₫')
             ->call('checkout')
             ->assertSee('Đã thanh toán 120.000 ₫')
@@ -156,11 +156,11 @@ class BillingTest extends TestCase
     public function test_revenue_report(): void
     {
         $this->serve(['Phở' => [2, 65000], 'Trà đá' => [1, 5000]]);
-        app(BillingService::class)->checkout($this->session, $this->waiter, PaymentMethod::Cash);
+        app(BillingService::class)->checkout($this->session, $this->waiter, [PaymentLine::cash()]);
 
         $session2 = app(TableSessionService::class)->openForTable(DiningTable::factory()->create(), TableSessionSource::Qr);
         $this->serve(['Phở' => [1, 65000]], session: $session2);
-        app(BillingService::class)->checkout($session2, $this->waiter, PaymentMethod::BankTransfer);
+        app(BillingService::class)->checkout($session2, $this->waiter, [PaymentLine::transfer()]);
 
         $report = app(RevenueReport::class);
         $today = DateRange::fromFilters(['preset' => 'today']);
@@ -180,7 +180,7 @@ class BillingTest extends TestCase
     public function test_revenue_pages_render(): void
     {
         $this->serve(['Phở' => [1, 65000]]);
-        app(BillingService::class)->checkout($this->session, $this->waiter, PaymentMethod::Cash);
+        app(BillingService::class)->checkout($this->session, $this->waiter, [PaymentLine::cash()]);
         $admin = User::factory()->admin()->create();
 
         $this->actingAs($admin)->get('/admin')->assertOk()->assertSee('Tổng quan');

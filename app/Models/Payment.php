@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Một khoản tiền nhân viên đã xác nhận nhận được (tiền mặt hoặc chuyển khoản).
  */
-#[Fillable(['invoice_id', 'method', 'amount', 'received_amount', 'reference', 'note', 'confirmed_by', 'confirmed_at'])]
+#[Fillable(['invoice_id', 'method', 'amount', 'received_amount', 'reference', 'bank_transaction_id', 'note', 'confirmed_by', 'confirmed_at'])]
 class Payment extends Model
 {
     protected function casts(): array
@@ -37,6 +37,16 @@ class Payment extends Model
     }
 
     /**
+     * @return BelongsTo<BankTransaction, $this>
+     */
+    public function bankTransaction(): BelongsTo
+    {
+        return $this->belongsTo(BankTransaction::class);
+    }
+
+    /**
+     * Người xác nhận; null = hệ thống tự ghi nhận qua webhook ngân hàng.
+     *
      * @return BelongsTo<User, $this>
      */
     public function confirmer(): BelongsTo

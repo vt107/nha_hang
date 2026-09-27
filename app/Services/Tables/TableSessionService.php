@@ -94,7 +94,7 @@ class TableSessionService
     }
 
     /**
-     * Đóng phiên không thu tiền: khách quét nhầm / bỏ về khi chưa có món nào được làm.
+     * Đóng phiên không thu thêm tiền: khách quét nhầm / bỏ về, hoặc mọi món đã nằm trong các hóa đơn tách.
      * Order chờ duyệt bị từ chối luôn.
      */
     public function closeWithoutPayment(TableSession $session, User $by): void
@@ -106,8 +106,8 @@ class TableSessionService
                 throw new BusinessException('Phiên bàn đã đóng.');
             }
 
-            if ($session->orderItems()->whereIn('order_items.status', OrderItemStatus::billable())->exists()) {
-                throw new BusinessException('Bàn đã có món được làm, hãy thanh toán hoặc hủy món trước.');
+            if ($session->orderItems()->unbilled()->exists()) {
+                throw new BusinessException('Bàn còn món chưa thanh toán, hãy thu tiền hoặc hủy món trước.');
             }
 
             $session->orders()->where('status', OrderStatus::Pending)->each(function ($order) use ($by) {
@@ -127,17 +127,17 @@ class TableSessionService
     }
 
     /** Đánh dấu phiên đã đóng và xử lý xong các yêu cầu còn treo. Gọi bên trong transaction. */
-    public function markClosed(TableSession $session, User $by): void
+    public function markClosed(TableSession $session, ?User $by): void
     {
         $session->update([
             'status' => TableSessionStatus::Closed,
             'closed_at' => now(),
-            'closed_by' => $by->id,
+            'closed_by' => $by?->id,
         ]);
 
         $session->serviceRequests()->where('status', ServiceRequestStatus::Pending)->update([
             'status' => ServiceRequestStatus::Done,
-            'handled_by' => $by->id,
+            'handled_by' => $by?->id,
             'handled_at' => now(),
         ]);
     }

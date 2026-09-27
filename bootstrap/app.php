@@ -18,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'table.session' => \App\Http\Middleware\EnsureTableSession::class,
         ]);
 
+        // Webhook ngân hàng xác thực bằng API key, không có CSRF token.
+        $middleware->preventRequestForgery(except: ['webhooks/*']);
+
         $middleware->redirectGuestsTo('/login');
         $middleware->redirectUsersTo(fn () => \App\Http\Controllers\Auth\LoginController::homeFor(auth()->user()));
     })

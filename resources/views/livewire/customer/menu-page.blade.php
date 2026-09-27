@@ -1,5 +1,4 @@
 @use('App\Support\Money')
-@php($cartQuantities = collect($this->cartLines)->pluck('quantity', 'id'))
 
 <div x-data="{ cartOpen: false }">
     <x-customer.shell :session="$this->tableSession" active="menu">
@@ -20,7 +19,8 @@
                     <h2 class="mb-2 text-base font-bold text-stone-800">{{ $category->name }}</h2>
                     <div class="divide-y divide-stone-100 overflow-hidden rounded-2xl bg-white ring-1 ring-stone-200">
                         @foreach ($category->menuItems as $item)
-                            @php($qty = $cartQuantities[$item->id] ?? 0)
+                            @php($qty = $this->quantitiesByItem[$item->id] ?? 0)
+                            @php($hasOptions = $item->optionGroups->isNotEmpty())
                             <article wire:key="item-{{ $item->id }}" @class(['flex gap-3 p-3', 'opacity-60' => ! $item->is_available])>
                                 <div class="min-w-0 flex-1">
                                     <h3 class="font-semibold leading-snug">
@@ -32,7 +32,10 @@
                                     @if ($item->description)
                                         <p class="mt-0.5 line-clamp-2 text-sm text-stone-500">{{ $item->description }}</p>
                                     @endif
-                                    <p class="mt-1.5 font-bold text-amber-700">{{ Money::format($item->price) }}</p>
+                                    <p class="mt-1.5 font-bold text-amber-700">
+                                        {{ Money::format($item->price) }}
+                                        @if ($hasOptions)<span class="text-xs font-medium text-stone-500">· có tùy chọn</span>@endif
+                                    </p>
                                 </div>
                                 <div class="relative size-24 shrink-0">
                                     @if ($item->image_url)
@@ -43,7 +46,7 @@
 
                                     @if (! $item->is_available)
                                         <span class="absolute inset-x-1 bottom-1 rounded-lg bg-stone-900/80 py-1 text-center text-xs font-semibold text-white">Tạm hết</span>
-                                    @elseif ($qty > 0)
+                                    @elseif ($qty > 0 && ! $hasOptions)
                                         <div class="absolute inset-x-1 -bottom-2 flex items-center justify-between rounded-full bg-amber-600 p-0.5 text-white shadow">
                                             <button type="button" wire:click="decrement({{ $item->id }})" class="flex size-7 items-center justify-center rounded-full text-lg font-bold active:bg-amber-700" aria-label="Bớt">−</button>
                                             <span class="text-sm font-bold">{{ $qty }}</span>
@@ -53,6 +56,9 @@
                                         <button type="button" wire:click="add({{ $item->id }})"
                                             class="absolute -bottom-2 -right-1 flex size-9 items-center justify-center rounded-full bg-amber-600 text-2xl font-bold text-white shadow-md active:scale-90"
                                             aria-label="Thêm {{ $item->name }}">+</button>
+                                        @if ($qty > 0)
+                                            <span class="absolute -right-1 -top-1 flex size-6 items-center justify-center rounded-full bg-stone-900 text-xs font-bold text-white">{{ $qty }}</span>
+                                        @endif
                                     @endif
                                 </div>
                             </article>
@@ -94,25 +100,28 @@
 
             <div class="flex-1 space-y-4 overflow-y-auto px-5 py-4">
                 @forelse ($this->cartLines as $line)
-                    <div wire:key="cart-{{ $line['id'] }}" class="space-y-2">
+                    <div wire:key="cart-{{ $line['key'] }}" class="space-y-2">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p @class(['font-semibold', 'text-red-600 line-through' => ! $line['orderable']])>{{ $line['name'] }}</p>
+                                @if ($line['options'])
+                                    <p class="text-xs text-stone-500">{{ $line['options'] }}</p>
+                                @endif
                                 @if (! $line['orderable'])
-                                    <p class="text-xs text-red-600">Món đã hết, vui lòng bỏ khỏi giỏ.</p>
+                                    <p class="text-xs text-red-600">Món / tùy chọn đã hết, vui lòng bỏ khỏi giỏ.</p>
                                 @else
                                     <p class="text-sm text-stone-500">{{ Money::format($line['price']) }}</p>
                                 @endif
                             </div>
                             <div class="flex shrink-0 items-center gap-1 rounded-full bg-stone-100 p-0.5">
-                                <button type="button" wire:click="{{ $line['orderable'] && $line['quantity'] > 1 ? 'decrement' : 'remove' }}({{ $line['id'] }})" class="flex size-8 items-center justify-center rounded-full text-lg font-bold active:bg-stone-200">−</button>
+                                <button type="button" wire:click="{{ $line['orderable'] && $line['quantity'] > 1 ? 'decrementLine' : 'removeLine' }}('{{ $line['key'] }}')" class="flex size-8 items-center justify-center rounded-full text-lg font-bold active:bg-stone-200">−</button>
                                 <span class="w-6 text-center font-bold">{{ $line['quantity'] }}</span>
-                                <button type="button" wire:click="add({{ $line['id'] }})" @disabled(! $line['orderable']) class="flex size-8 items-center justify-center rounded-full text-lg font-bold active:bg-stone-200 disabled:opacity-30">+</button>
+                                <button type="button" wire:click="incrementLine('{{ $line['key'] }}')" @disabled(! $line['orderable']) class="flex size-8 items-center justify-center rounded-full text-lg font-bold active:bg-stone-200 disabled:opacity-30">+</button>
                             </div>
                         </div>
                         @if ($line['orderable'])
                             <input type="text" value="{{ $line['note'] }}" maxlength="200" placeholder="Ghi chú: ít cay, không hành..."
-                                wire:change="updateNote({{ $line['id'] }}, $event.target.value)"
+                                wire:change="updateNote('{{ $line['key'] }}', $event.target.value)"
                                 class="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-amber-400 focus:outline-none">
                         @endif
                     </div>
@@ -141,4 +150,6 @@
             @endif
         </div>
     </div>
+
+    @include('partials.option-picker')
 </div>

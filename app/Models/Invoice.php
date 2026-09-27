@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'table_session_id', 'code', 'subtotal', 'discount_amount', 'service_charge_amount',
-    'vat_amount', 'total', 'status', 'paid_at', 'cashier_id', 'note',
+    'vat_amount', 'total', 'status', 'paid_at', 'voided_at', 'voided_by', 'void_reason', 'cashier_id', 'note',
 ])]
 class Invoice extends Model
 {
@@ -29,6 +29,7 @@ class Invoice extends Model
             'vat_amount' => 'integer',
             'total' => 'integer',
             'paid_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 
@@ -51,6 +52,22 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * @return HasMany<OrderItem, $this>
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function voider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 
     /**

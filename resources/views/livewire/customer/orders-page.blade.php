@@ -30,7 +30,7 @@
                             <li wire:key="order-item-{{ $item->id }}" class="flex items-start justify-between gap-3 px-4 py-3">
                                 <div class="min-w-0">
                                     <p @class(['font-medium', 'text-stone-400 line-through' => $item->status === \App\Enums\OrderItemStatus::Cancelled])>
-                                        <span class="font-bold text-amber-700">{{ $item->quantity }}×</span> {{ $item->item_name }}
+                                        <span class="font-bold text-amber-700">{{ $item->quantity }}×</span> {{ $item->display_name }}
                                     </p>
                                     @if ($item->note)
                                         <p class="text-xs text-stone-500">“{{ $item->note }}”</p>
