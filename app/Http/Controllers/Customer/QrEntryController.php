@@ -7,6 +7,7 @@ use App\Exceptions\BusinessException;
 use App\Http\Controllers\Controller;
 use App\Models\DiningTable;
 use App\Services\Tables\TableSessionService;
+use App\Support\Demo\DemoModeException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -31,6 +32,12 @@ class QrEntryController extends Controller
             $session = $sessions->openForTable($table, TableSessionSource::Qr);
         } catch (BusinessException $e) {
             return response()->view('customer.message', ['title' => $table->displayName(), 'message' => $e->getMessage()], 423);
+        } catch (DemoModeException) {
+            // Bản demo: bàn trống không mở được phiên mới (chỉ xem), hướng sang bàn demo đang có phiên (trang 200 để có nút Demo).
+            return response()->view('customer.message', [
+                'title' => $table->displayName(),
+                'message' => 'Bản demo chỉ xem: bàn này đang trống nên không mở phiên mới được. Hãy mở mục "Khách tại bàn" trong nút Demo để xem bàn đang gọi món.',
+            ]);
         }
 
         $request->session()->put('table_session_token', $session->token);

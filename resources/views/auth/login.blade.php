@@ -1,4 +1,6 @@
 <x-layouts::app title="Đăng nhập nhân viên">
+    {{-- Chế độ demo: điền sẵn tài khoản (?demo=<key>, mặc định nhân viên phục vụ). --}}
+    @php($demoCredentials = \App\Support\Demo\DemoMode::credentials('waiter'))
     <main class="flex min-h-screen items-center justify-center p-4">
         <form method="POST" action="{{ route('login') }}" class="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
             @csrf
@@ -16,12 +18,12 @@
 
             <label class="block">
                 <span class="text-sm font-medium">Email</span>
-                <input type="email" name="email" value="{{ old('email') }}" required autofocus autocomplete="username"
+                <input type="email" name="email" value="{{ old('email', $demoCredentials['email'] ?? '') }}" required autofocus autocomplete="username"
                     class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2.5 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none">
             </label>
             <label class="block">
                 <span class="text-sm font-medium">Mật khẩu</span>
-                <input type="password" name="password" required autocomplete="current-password"
+                <input type="password" name="password" value="{{ $demoCredentials['password'] ?? '' }}" required autocomplete="current-password"
                     class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2.5 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none">
             </label>
             <label class="flex items-center gap-2 text-sm">

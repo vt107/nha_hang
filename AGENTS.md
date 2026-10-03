@@ -15,6 +15,16 @@ Chạy hoàn toàn bằng Docker. PHP trên máy host là 8.0 nên **không** ch
 - Tài khoản seed (mật khẩu `password`): `admin@nhahang.test`, `manager@nhahang.test`, `waiter@nhahang.test`, `kitchen@nhahang.test`
 - Nginx proxy `/app/*`, `/apps/*` sang Reverb (:8080 nội bộ); trình duyệt kết nối WebSocket cùng host / port với web (`VITE_REVERB_*`)
 
+## Chế độ demo (chỉ xem)
+
+Bản giới thiệu cho khách xem: `DEMO_MODE=true` (`config/demo.php`, code ở `app/Support/Demo`, `DemoServiceProvider`). Website thật để `false` (mặc định), khi đó không có tác dụng gì.
+
+- Mọi lệnh ghi SQL từ request web bị chặn (`DB::beforeExecuting`), POST/PUT/DELETE ngoài `allowed_routes` bị chặn trước controller (webhook SePay trả 403 JSON). Livewire / Filament hiện toast thay vì trang lỗi; upload file bị chặn; cột sửa nhanh trong bảng Filament (toggle...) bị khóa. Artisan / queue / scheduler / test không bị chặn.
+- Nút "Demo" nổi góc trái dưới mọi trang (kể cả Filament) liệt kê khu vực + tài khoản (`portals`); `/demo/switch/{key}` đăng xuất rồi mở trang đăng nhập điền sẵn (`?demo=<key>`). Tài khoản (mật khẩu `password`): `admin@`, `manager@` (Filament), `waiter@` (`/staff`), `kitchen@` (`/kitchen`) `nhahang.test`; khách tại bàn: `/t/{demo.qr_table_token}` (bàn A03 luôn có phiên đang mở).
+- `php artisan demo:reset --force`: migrate:fresh + seed (`DatabaseSeeder` gọi `Database\Seeders\Demo\DemoSeeder` khi demo bật: thực đơn đủ trạng thái, 90 ngày hóa đơn / thanh toán / giao dịch SePay, đặt bàn, 11 bàn đang phục vụ tạo qua service thật). Scheduler chạy theo `DEMO_RESET_AT` (nhận nhiều mốc, vd `04:00,11:00,17:00`). Ngày giờ seed tương đối so với lúc chạy.
+- Ở demo: không ghi `last_login_at`; vào QR bàn trống thì hiện hướng dẫn (không mở phiên mới).
+- Thêm tính năng mới: thao tác có tác dụng phụ ngoài DB (gửi tin, gọi API, ghi / xóa file, xóa cache, chạy lệnh) gọi `DemoMode::abortIfEnabled()` ngay đầu action; lệnh ghi bắt buộc khi chỉ xem trang thì seed sẵn dữ liệu, bất đắc dĩ mới `DemoMode::bypass()` / thêm `allowed_write_patterns`. Bổ sung dữ liệu demo cho tính năng mới trong `database/seeders/Demo`. Test: `tests/Feature/DemoModeTest.php` (bật `DEMO_MODE` trước khi boot app + `DemoMode::forceGuard()`).
+
 ## Màn hình & route
 
 | Ai | URL | Code |

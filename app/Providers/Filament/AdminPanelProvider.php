@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\Login;
 use App\Support\Site;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -28,7 +29,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->login()
+            ->login(Login::class)
             // Thương hiệu lấy từ Cài đặt (closure: chỉ đọc DB khi render, không phải lúc build image / boot).
             ->brandName(fn () => app(Site::class)->name())
             ->brandLogo(fn () => app(Site::class)->logoUrl())

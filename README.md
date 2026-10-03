@@ -16,6 +16,7 @@ npm install && npm run build
 
 - Web: http://localhost:8090 · Admin: http://localhost:8090/admin (`admin@nhahang.test` / `password`) · Horizon: `/horizon`
 - Test: `make test`
+- Bản demo chỉ xem: `DEMO_MODE=true` trong `.env` rồi `make artisan c="demo:reset --force"` (xem mục "Chế độ demo" trong CLAUDE.md)
 
 ## Triển khai production
 

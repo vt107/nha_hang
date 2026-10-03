@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Models\User;
+use App\Support\Demo\DemoMode;
 use App\Support\Site;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -47,7 +48,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('access-admin', fn (User $user) => $user->is_active && $user->role->canAccessAdmin());
 
         Event::listen(Login::class, function (Login $event) {
-            if ($event->user instanceof User) {
+            // Bản demo chỉ xem: không ghi lần đăng nhập cuối (lệnh ghi bị guard SQL chặn sẽ làm đăng nhập thất bại).
+            if ($event->user instanceof User && ! DemoMode::guarding()) {
                 $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
             }
         });
